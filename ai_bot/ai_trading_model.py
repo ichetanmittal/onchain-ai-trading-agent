@@ -9,6 +9,7 @@ import yfinance as yf
 import subprocess
 import sys
 import os
+from monitoring import TradingMonitor
 
 # We'll keep your existing structure, but add a second asset (ETH) so we can
 # store two predictions in the canister and then rebalance.
@@ -73,6 +74,8 @@ def predict_prices(model, X_test, scaler):
 
 
 if __name__ == "__main__":
+    # Initialize trading monitor
+    monitor = TradingMonitor()
 
     # -----------------------------
     # 1. BTC Prediction
@@ -95,6 +98,13 @@ if __name__ == "__main__":
     # We'll just print the final BTC predicted price (last test sample)
     final_btc_pred = float(predictions_btc[-1][0])
     print(f"Final BTC predicted price: {final_btc_pred}")
+
+    # Validate and log BTC prediction
+    current_btc_price = float(df_btc['Close'].iloc[-1])
+    if monitor.log_prediction("BTC-USD", final_btc_pred, current_btc_price):
+        print("BTC prediction validated and logged")
+    else:
+        print("Warning: BTC prediction seems unusual, proceeding with caution")
 
     # Evaluate BTC performance for reference
     actual_btc = df_btc['Close'].values[60:]
@@ -126,6 +136,13 @@ if __name__ == "__main__":
     predictions_eth = predict_prices(model_eth, X_eth_test, scaler_eth)
     final_eth_pred = float(predictions_eth[-1][0])
     print(f"Final ETH predicted price: {final_eth_pred}")
+
+    # Validate and log ETH prediction
+    current_eth_price = float(df_eth['Close'].iloc[-1])
+    if monitor.log_prediction("ETH-USD", final_eth_pred, current_eth_price):
+        print("ETH prediction validated and logged")
+    else:
+        print("Warning: ETH prediction seems unusual, proceeding with caution")
 
     actual_eth = df_eth['Close'].values[60:]
     actual_eth_test = actual_eth[split_idx_eth:]
@@ -195,6 +212,28 @@ if __name__ == "__main__":
         ]
         portfolio_res = subprocess.run(cmd_portfolio, check=True, capture_output=True, text=True)
         print("Updated portfolio:", portfolio_res.stdout.strip())
+
+        # Parse and log portfolio update
+        portfolio_str = portfolio_res.stdout.strip()
+        # Extract numbers from (record { btc = X : float64; eth = Y : float64 })
+        import re
+        numbers = re.findall(r'(\d+\.?\d*)', portfolio_str)
+        if len(numbers) == 2:
+            portfolio = {'BTC': float(numbers[0]), 'ETH': float(numbers[1])}
+            monitor.log_portfolio_update(
+                portfolio,
+                f"Rebalance based on predictions: BTC={final_btc_pred}, ETH={final_eth_pred}"
+            )
+
+        # Display performance metrics
+        metrics = monitor.get_performance_metrics(days=30)
+        if metrics:
+            print("\nPerformance Metrics (Last 30 days):")
+            print(f"Total Return: {metrics['total_return_pct']:.2f}%")
+            print(f"Volatility: {metrics['volatility']:.2f}%")
+            print(f"Sharpe Ratio: {metrics['sharpe_ratio']:.2f}")
+            print(f"Max Drawdown: {metrics['max_drawdown']:.2f}%")
+            print(f"Prediction Accuracy: {metrics['prediction_accuracy']:.2f}%")
     except subprocess.CalledProcessError as e:
         print("Error calling canister:", e)
         sys.exit(1)

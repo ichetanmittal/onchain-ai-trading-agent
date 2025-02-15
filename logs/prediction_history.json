@@ -1,0 +1,16 @@
+[
+  {
+    "timestamp": "2025-02-16T02:06:20.903094",
+    "ticker": "BTC-USD",
+    "predicted_price": 47783.84765625,
+    "current_price": 46306.4453125,
+    "is_valid": true
+  },
+  {
+    "timestamp": "2025-02-16T02:06:35.891707",
+    "ticker": "ETH-USD",
+    "predicted_price": 3774.4208984375,
+    "current_price": 3682.6328125,
+    "is_valid": true
+  }
+]
