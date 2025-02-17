@@ -11,9 +11,10 @@ actor {
     eth = 1000.0;
   };
 
-  // Store latest predictions
+  // Store latest predictions and rebalance result
   var latestBtcPrediction : Float = 0.0;
   var latestEthPrediction : Float = 0.0;
+  var latestRebalanceResult : Text = "";
 
   public func getPortfolio() : async Portfolio {
     return portfolio;
@@ -29,6 +30,11 @@ actor {
     latestEthPrediction := ethPred;
   };
 
+  // Get the latest rebalance result
+  public func getRebalanceResult() : async Text {
+    return latestRebalanceResult;
+  };
+
   // Simple example: if BTC pred > ETH pred => 70/30; else 30/70
   public func rebalance() : async Text {
     let total = portfolio.btc + portfolio.eth;
@@ -37,13 +43,14 @@ actor {
         btc = total * 0.7;
         eth = total * 0.3;
       };
-      return "BTC predicted to outperform => Rebalanced to 70/30.";
+      latestRebalanceResult := "BTC predicted to outperform => Rebalanced to 70/30.";
     } else {
       portfolio := {
         btc = total * 0.3;
         eth = total * 0.7;
       };
-      return "ETH predicted to outperform => Rebalanced to 30/70.";
+      latestRebalanceResult := "ETH predicted to outperform => Rebalanced to 30/70.";
     };
+    return latestRebalanceResult;
   };
 }
