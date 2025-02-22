@@ -98,70 +98,61 @@ class ModelTrainer:
                     
                     # Train model
                     trainer.fit(model, data_module)
-                    
-                    # Log metrics
-                    mlflow.log_metrics(trainer.callback_metrics)
-                    
-                    # Log model
-                    mlflow.pytorch.log_model(model, "model")
-                    
             else:
                 # Train model without MLflow
                 trainer.fit(model, data_module)
                 
-            return trainer
+            return model
             
         except Exception as e:
             logger.error(f"Error training model: {str(e)}")
             raise
             
-    async def hyperparameter_optimization(
-        self,
-        data_module: CryptoDataModule,
-        n_trials: int = 100
-    ) -> Dict[str, Any]:
-        """Perform hyperparameter optimization using Optuna"""
+    def hyperparameter_optimization(self, data_module: CryptoDataModule):
+        """Run hyperparameter optimization using Optuna"""
         try:
-            async def objective(trial: optuna.Trial) -> float:
-                # Define hyperparameter search space
-                config = self.config
-                config['learning_rate'] = trial.suggest_loguniform('learning_rate', 1e-5, 1e-3)
-                config['dropout'] = trial.suggest_uniform('dropout', 0.1, 0.5)
-                config['nhead'] = trial.suggest_categorical('nhead', [4, 8, 16])
-                config['num_encoder_layers'] = trial.suggest_int('num_encoder_layers', 2, 8)
-                config['num_decoder_layers'] = trial.suggest_int('num_decoder_layers', 2, 8)
+            study = optuna.create_study(
+                direction="minimize",
+                pruner=optuna.pruners.MedianPruner()
+            )
+            
+            def objective(trial):
+                # Define hyperparameters to optimize
+                config = {
+                    'd_model': trial.suggest_int('d_model', 32, 512),
+                    'nhead': trial.suggest_int('nhead', 2, 16),
+                    'num_encoder_layers': trial.suggest_int('num_encoder_layers', 2, 12),
+                    'dim_feedforward': trial.suggest_int('dim_feedforward', 128, 2048),
+                    'dropout': trial.suggest_float('dropout', 0.1, 0.5),
+                    'learning_rate': trial.suggest_loguniform('learning_rate', 1e-5, 1e-2)
+                }
                 
-                # Create model and trainer
-                model = CryptoTransformerLightning(config)
+                # Create model with trial params
+                model = CryptoTransformerLightning({**self.config, **config})
+                
+                # Create trainer with pruning callback
                 trainer = pl.Trainer(
-                    max_epochs=10,  # Use fewer epochs for HPO
-                    callbacks=[PyTorchLightningPruningCallback(trial, monitor='val_loss')],
-                    logger=False,
+                    max_epochs=self.config.get('training', {}).get('max_epochs', 100),
+                    callbacks=[
+                        PyTorchLightningPruningCallback(trial, monitor="val_loss"),
+                        *self.create_callbacks()
+                    ],
                     accelerator='auto',
                     devices='auto'
                 )
                 
-                # Train and validate
-                await trainer.fit(model, data_module)
+                # Train and return validation loss
+                trainer.fit(model, data_module)
+                return trainer.callback_metrics["val_loss"].item()
                 
-                return trainer.callback_metrics['val_loss'].item()
-                
-            # Create study
-            study = optuna.create_study(
-                direction='minimize',
-                pruner=optuna.pruners.MedianPruner()
-            )
-            
-            # Optimize
-            await study.optimize(objective, n_trials=n_trials)
+            study.optimize(objective, n_trials=100)
             
             # Log best parameters
-            mlflow.log_params(study.best_params)
-            
+            logger.info(f"Best hyperparameters: {study.best_params}")
             return study.best_params
             
         except Exception as e:
-            logger.error(f"Error during hyperparameter optimization: {str(e)}")
+            logger.error(f"Error in hyperparameter optimization: {str(e)}")
             raise
             
 class UncertaintyMonitorCallback(pl.Callback):

@@ -96,118 +96,52 @@ class CryptoDataCollector:
         logger.error(f"All Binance API endpoints failed: {str(last_error)}")
         raise last_error
             
-    async def collect_all_data(self) -> pd.DataFrame:
-        """Collect all types of data and combine them"""
+    async def collect_data(self) -> pd.DataFrame:
+        """Collect market data from Binance"""
         try:
-            timeout = aiohttp.ClientTimeout(total=30)  # 30 seconds total timeout
-            connector = aiohttp.TCPConnector(
-                verify_ssl=True,
-                use_dns_cache=True,
-                ttl_dns_cache=300,  # 5 minutes DNS cache
-                limit=10  # Limit concurrent connections
-            )
-            
-            async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
-                # Collect market data
-                all_market_data = []
+            async with aiohttp.ClientSession() as session:
+                all_data = []
+                
+                # Get klines data for each symbol
                 for symbol in self.symbols:
-                    try:
-                        # Get klines (OHLCV) data with retry
-                        for attempt in range(3):
-                            try:
-                                klines = await self._make_request(
-                                    session,
-                                    '/api/v3/klines',
-                                    {
-                                        'symbol': symbol,
-                                        'interval': self.timeframe,
-                                        'limit': 1000
-                                    }
-                                )
-                                break
-                            except Exception as e:
-                                if attempt == 2:
-                                    raise
-                                wait_time = 2 ** attempt
-                                logger.warning(f"Retrying klines fetch for {symbol} after {wait_time}s: {str(e)}")
-                                await asyncio.sleep(wait_time)
-                        
-                        # Convert to DataFrame
-                        df = pd.DataFrame(
-                            klines,
-                            columns=['timestamp', 'open', 'high', 'low', 'close', 'volume',
-                                    'close_time', 'quote_volume', 'trades', 'taker_buy_base',
-                                    'taker_buy_quote', 'ignore']
-                        )
-                        
-                        # Convert numeric columns to float
-                        numeric_columns = ['open', 'high', 'low', 'close', 'volume',
-                                         'quote_volume', 'trades', 'taker_buy_base',
-                                         'taker_buy_quote']
-                        df[numeric_columns] = df[numeric_columns].astype(float)
-                        
-                        df['symbol'] = symbol
-                        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-                        df.set_index('timestamp', inplace=True)
-                        
-                        # Add order book data with retry
-                        for attempt in range(3):
-                            try:
-                                depth = await self._make_request(
-                                    session,
-                                    '/api/v3/depth',
-                                    {'symbol': symbol, 'limit': 100}
-                                )
-                                df['bid_ask_spread'] = float(depth['asks'][0][0]) - float(depth['bids'][0][0])
-                                df['order_book_depth'] = len(depth['asks']) + len(depth['bids'])
-                                break
-                            except Exception as e:
-                                if attempt == 2:
-                                    logger.warning(f"Failed to fetch order book for {symbol}: {str(e)}")
-                                    break
-                                wait_time = 2 ** attempt
-                                logger.warning(f"Retrying order book fetch for {symbol} after {wait_time}s")
-                                await asyncio.sleep(wait_time)
-                        
-                        all_market_data.append(df)
-                        await asyncio.sleep(0.1)  # Rate limit compliance
-                        
-                    except Exception as e:
-                        logger.warning(f"Error fetching data for {symbol}: {str(e)}")
-                        continue
-                        
-                if not all_market_data:
-                    raise ValueError("Could not fetch any market data")
+                    endpoint = '/api/v3/klines'
+                    params = {
+                        'symbol': symbol,
+                        'interval': self.timeframe,
+                        'limit': 2000  # Maximum allowed by Binance
+                    }
                     
-                # Combine market data
-                market_data = pd.concat(all_market_data)
+                    data = await self._make_request(session, endpoint, params)
+                    
+                    # Convert to DataFrame
+                    df = pd.DataFrame(data, columns=[
+                        'timestamp', 'open', 'high', 'low', 'close', 'volume',
+                        'close_time', 'quote_volume', 'trades', 'taker_buy_volume',
+                        'taker_buy_quote_volume', 'ignore'
+                    ])
+                    
+                    # Clean up data
+                    df = df.drop(['close_time', 'ignore'], axis=1)
+                    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                    df['symbol'] = symbol.replace('USDT', '/USDT')  # Convert back to BTC/USDT format
+                    
+                    # Convert string columns to float
+                    for col in ['open', 'high', 'low', 'close', 'volume', 'quote_volume',
+                              'trades', 'taker_buy_volume', 'taker_buy_quote_volume']:
+                        df[col] = df[col].astype(float)
+                    
+                    all_data.append(df)
                 
-                # Get on-chain data
-                try:
-                    onchain_data = await self.fetch_onchain_data()
-                except Exception as e:
-                    logger.warning(f"Error fetching on-chain data: {str(e)}")
-                    onchain_data = pd.DataFrame()
+                # Combine all symbols' data
+                combined_df = pd.concat(all_data, ignore_index=True)
                 
-                # Combine all data
-                if not market_data.empty and not onchain_data.empty:
-                    combined_data = pd.merge(
-                        market_data,
-                        onchain_data,
-                        left_index=True,
-                        right_index=True,
-                        how='left'
-                    )
-                else:
-                    combined_data = market_data
-                
-                logger.info(f"Collected {len(combined_data)} data points")
-                return combined_data
+                logger.info(f"Collected {len(combined_df)} data points")
+                return combined_df
                 
         except Exception as e:
-            logger.error(f"Error collecting data: {str(e)}")
+            logger.error(f"Error collecting market data: {str(e)}")
             raise
-            
+
     async def fetch_onchain_data(self) -> pd.DataFrame:
         """Fetch on-chain metrics from Ethereum"""
         try:
@@ -250,4 +184,28 @@ class CryptoDataCollector:
             
         except Exception as e:
             logger.error(f"Error fetching on-chain data: {str(e)}")
+            raise
+
+    async def collect_all_data(self) -> pd.DataFrame:
+        """Collect all types of data and combine them"""
+        try:
+            market_data = await self.collect_data()
+            onchain_data = await self.fetch_onchain_data()
+            
+            if not market_data.empty and not onchain_data.empty:
+                combined_data = pd.merge(
+                    market_data,
+                    onchain_data,
+                    left_index=True,
+                    right_index=True,
+                    how='left'
+                )
+            else:
+                combined_data = market_data
+                
+            logger.info(f"Collected {len(combined_data)} data points")
+            return combined_data
+                
+        except Exception as e:
+            logger.error(f"Error collecting data: {str(e)}")
             raise

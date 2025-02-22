@@ -1,8 +1,13 @@
 {
-    "model": {
+    "data": {
+        "symbols": ["BTC/USDT", "ETH/USDT"],
+        "timeframe": "1h",
         "sequence_length": 60,
-        "prediction_horizon": 12,
-        "input_dim": 50,
+        "prediction_horizon": 12
+    },
+    
+    "model": {
+        "input_dim": 38,
         "output_dim": 1,
         "d_model": 256,
         "nhead": 8,
@@ -10,33 +15,35 @@
         "num_decoder_layers": 6,
         "dim_feedforward": 1024,
         "dropout": 0.1,
-        "activation": "relu",
-        "learning_rate": 0.001
+        "activation": "relu"
     },
+    
     "training": {
-        "batch_size": 32,
         "max_epochs": 100,
-        "train_val_split": 0.8,
-        "use_mixed_precision": true,
-        "gradient_clip_val": 0.5,
+        "batch_size": 32,
+        "learning_rate": 0.001,
         "early_stopping_patience": 10,
+        "gradient_clip_val": 0.5,
         "precision": 32,
         "monitor_uncertainty": false,
         "monitor_trading_metrics": false
     },
+    
     "trading": {
-        "symbols": ["BTC/USDT", "ETH/USDT"],
-        "max_position_size": 0.1,
-        "risk_aversion": 0.5,
-        "rebalance_threshold": 0.05,
-        "timeframe": "1h"
+        "portfolio_rebalance_interval": 24,
+        "risk_free_rate": 0.02,
+        "target_volatility": 0.15,
+        "max_position_size": 0.2
     },
-    "mlops": {
-        "wandb_project": "crypto-trading-bot",
-        "mlflow_experiment": "crypto-trading",
-        "wandb_enabled": false,
-        "mlflow_enabled": false,
-        "mlflow_tracking_uri": "http://localhost:5000",
-        "mlflow_experiment_name": "crypto_trading_bot"
+    
+    "wandb": {
+        "enabled": false,
+        "project": "crypto-trading-bot"
+    },
+    
+    "mlflow": {
+        "enabled": false,
+        "tracking_uri": "http://localhost:5000",
+        "experiment_name": "crypto_trading_bot"
     }
 }

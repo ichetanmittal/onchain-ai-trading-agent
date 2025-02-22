@@ -1,135 +1,139 @@
-import logging
-import asyncio
-from typing import Dict, Optional, List, Tuple
-import pandas as pd
-import torch
-from torch.utils.data import Dataset, DataLoader, TensorDataset
 import pytorch_lightning as pl
+from torch.utils.data import DataLoader, TensorDataset
+import torch
+import numpy as np
+import pandas as pd
+from typing import Dict, List, Optional, Tuple
+import logging
 from ..data_collectors.crypto_collector import CryptoDataCollector
 from ..features.feature_engineer import FeatureEngineer
 
 logger = logging.getLogger(__name__)
 
 class CryptoDataModule(pl.LightningDataModule):
-    """Module for handling cryptocurrency data"""
+    """PyTorch Lightning data module for cryptocurrency data"""
     
     def __init__(self, config: Dict):
-        """
-        Initialize data module
-        
-        Args:
-            config: Configuration dictionary
-        """
         super().__init__()
         self.config = config
-        self.symbols = config.get('symbols', ['BTC/USDT', 'ETH/USDT'])
-        self.timeframe = config.get('timeframe', '1h')
-        self.sequence_length = config.get('sequence_length', 60)
-        self.prediction_horizon = config.get('prediction_horizon', 12)
+        self.symbols = config.get('data', {}).get('symbols', ['BTC/USDT', 'ETH/USDT'])
+        self.timeframe = config.get('data', {}).get('timeframe', '1h')
+        self.sequence_length = config.get('data', {}).get('sequence_length', 60)
+        self.prediction_horizon = config.get('data', {}).get('prediction_horizon', 12)
         self.batch_size = config.get('training', {}).get('batch_size', 32)
         
-        # Initialize components
         self.data_collector = CryptoDataCollector(
             symbols=self.symbols,
             timeframe=self.timeframe
         )
-        self.feature_engineer = FeatureEngineer(config)
+        self.feature_engineer = FeatureEngineer()
         
-        # Data storage
-        self.raw_data = None
-        self.features = None
-        self.train_data = None
-        self.val_data = None
+        self.train_data: Optional[TensorDataset] = None
+        self.val_data: Optional[TensorDataset] = None
+        self.market_data: Optional[pd.DataFrame] = None
         
     async def prepare_data(self):
-        """Prepare data for model training"""
+        """Collect and prepare data"""
         try:
-            # Collect data
-            self.raw_data = await self.data_collector.collect_all_data()
-            logger.info("Data collection completed")
+            logger.info("Collecting market data...")
+            self.market_data = await self.data_collector.collect_data()
+            logger.info(f"Market data shape: {self.market_data.shape}")
+            logger.info(f"Market data columns: {self.market_data.columns.tolist()}")
+            logger.info(f"Unique symbols in market data: {self.market_data['symbol'].unique().tolist()}")
+            
+            logger.info("Engineering features...")
+            features = self.feature_engineer.create_features({
+                'market_data': self.market_data
+            })
+            logger.info(f"Features shape: {features.shape}")
+            logger.info(f"Features columns: {features.columns.tolist()}")
+            logger.info(f"Unique symbols in features: {features['symbol'].unique().tolist()}")
+            
+            # Create sequences for each symbol
+            sequences = []
+            targets = []
+            
+            for symbol in self.symbols:
+                logger.info(f"Processing symbol: {symbol}")
+                symbol_mask = features['symbol'] == symbol
+                logger.info(f"Number of rows for {symbol}: {symbol_mask.sum()}")
+                
+                symbol_features = features[symbol_mask].sort_values('timestamp')
+                logger.info(f"Symbol features shape for {symbol}: {symbol_features.shape}")
+                
+                if symbol_features.empty:
+                    logger.warning(f"No data found for symbol {symbol}")
+                    continue
+                
+                # Convert to numpy for faster processing
+                feature_array = symbol_features.drop(['symbol', 'timestamp'], axis=1).values
+                logger.info(f"Feature array shape for {symbol}: {feature_array.shape}")
+                
+                # Create sequences
+                seq_count = 0
+                for i in range(len(feature_array) - self.sequence_length - self.prediction_horizon + 1):
+                    x = feature_array[i:i + self.sequence_length]
+                    y = feature_array[i + self.sequence_length + self.prediction_horizon - 1, 0]  # Price is first column
+                    sequences.append(x)
+                    targets.append(y)
+                    seq_count += 1
+                
+                logger.info(f"Created {seq_count} sequences for {symbol}")
+            
+            if not sequences:
+                raise ValueError(f"No sequences could be created. Check the logs for details.")
+            
+            # Convert to tensors
+            X = torch.tensor(sequences, dtype=torch.float32)
+            y = torch.tensor(targets, dtype=torch.float32).reshape(-1, 1)
+            
+            logger.info(f"Final tensor shapes - X: {X.shape}, y: {y.shape}")
+            
+            # Split into train/val
+            train_size = int(0.8 * len(X))
+            indices = torch.randperm(len(X))
+            
+            train_indices = indices[:train_size]
+            val_indices = indices[train_size:]
+            
+            # Create datasets
+            self.train_data = TensorDataset(
+                X[train_indices],
+                y[train_indices]
+            )
+            
+            self.val_data = TensorDataset(
+                X[val_indices],
+                y[val_indices]
+            )
+            
+            logger.info(f"Created {len(sequences)} sequences from {len(self.symbols)} symbols")
+            logger.info(f"Train dataset size: {len(self.train_data)}, Val dataset size: {len(self.val_data)}")
             
         except Exception as e:
             logger.error(f"Error preparing data: {str(e)}")
             raise
             
     def setup(self, stage: Optional[str] = None):
-        """Set up data for training"""
-        try:
-            # Format data as expected by feature engineer
-            data_dict = {'market_data': self.raw_data}
-            
-            # Prepare features
-            features_df = self.feature_engineer.prepare_features(data_dict)
-            
-            # Create sequences for each symbol
-            sequences = []
-            for symbol in self.raw_data['symbol'].unique():
-                # Get data for this symbol
-                symbol_mask = self.raw_data['symbol'] == symbol
-                symbol_features = features_df[symbol_mask]
-                
-                # Create sequences
-                X, y = self._create_sequences(symbol_features)
-                sequences.append((X, y))
-            
-            # Combine sequences from all symbols
-            if sequences:
-                X = torch.cat([seq[0] for seq in sequences])
-                y = torch.cat([seq[1] for seq in sequences])
-                
-                # Split into train/val
-                train_size = int(0.8 * len(X))
-                self.train_data = TensorDataset(X[:train_size], y[:train_size])
-                self.val_data = TensorDataset(X[train_size:], y[train_size:])
-                
-                logger.info(f"Created {len(X)} sequences from {len(sequences)} symbols")
-            else:
-                raise ValueError("No sequences could be created from the data")
-            
-        except Exception as e:
-            logger.error(f"Error setting up data: {str(e)}")
-            raise
-            
-    def _create_sequences(self, features: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Create sequences for training"""
-        try:
-            sequences = []
-            targets = []
-            
-            # Convert features to numpy for easier slicing
-            features_np = features.numpy()
-            
-            # Create sequences
-            for i in range(len(features_np) - self.sequence_length - self.prediction_horizon + 1):
-                seq = features_np[i:i + self.sequence_length]
-                target = features_np[i + self.sequence_length:i + self.sequence_length + self.prediction_horizon, 3]  # Use close price as target
-                sequences.append(seq)
-                targets.append(target)
-            
-            # Convert back to tensors
-            X = torch.tensor(sequences, dtype=torch.float32)
-            y = torch.tensor(targets, dtype=torch.float32)
-            
-            return X, y
-            
-        except Exception as e:
-            logger.error(f"Error creating sequences: {str(e)}")
-            raise
-            
+        """Setup data for training/validation"""
+        pass  # Data is already prepared in prepare_data
+        
     def train_dataloader(self):
-        """Get training dataloader"""
+        """Get training data loader"""
         return DataLoader(
             self.train_data,
             batch_size=self.batch_size,
             shuffle=True,
-            num_workers=0
+            num_workers=4,
+            pin_memory=True
         )
         
     def val_dataloader(self):
-        """Get validation dataloader"""
+        """Get validation data loader"""
         return DataLoader(
             self.val_data,
             batch_size=self.batch_size,
             shuffle=False,
-            num_workers=0
+            num_workers=4,
+            pin_memory=True
         )

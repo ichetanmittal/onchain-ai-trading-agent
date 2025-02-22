@@ -41,7 +41,7 @@ class TradingBotController:
             self.data_module.setup()
             
             # Initialize or load model
-            self.model = await self._load_or_train_model()
+            self.model = self._load_or_train_model()  # Removed await
             
             # Initialize trading executor
             self.executor = TradingExecutor(
@@ -53,7 +53,7 @@ class TradingBotController:
             logger.error(f"Error initializing trading bot: {str(e)}")
             raise
             
-    async def _load_or_train_model(self) -> CryptoTransformerLightning:
+    def _load_or_train_model(self) -> CryptoTransformerLightning:  # Removed async
         """Load existing model or train a new one"""
         try:
             # Initialize trainer
@@ -63,7 +63,7 @@ class TradingBotController:
             model = CryptoTransformerLightning(self.config)
             
             # Train model
-            await self.trainer.train(model, self.data_module)
+            self.trainer.train(model, self.data_module)  # Removed await
             
             return model
             
@@ -83,13 +83,13 @@ class TradingBotController:
             logger.error(f"Error in trading loop: {str(e)}")
             raise
             
-    async def optimize_hyperparameters(self):
+    def optimize_hyperparameters(self):  # Removed async
         """Run hyperparameter optimization"""
         try:
             if not self.trainer:
                 self.trainer = ModelTrainer(self.config)
                 
-            await self.trainer.hyperparameter_optimization(self.data_module)
+            self.trainer.hyperparameter_optimization(self.data_module)  # Removed await
             
         except Exception as e:
             logger.error(f"Error in hyperparameter optimization: {str(e)}")
