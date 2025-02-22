@@ -4,7 +4,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
 build/
 develop-eggs/
 dist/
@@ -16,35 +15,38 @@ lib64/
 parts/
 sdist/
 var/
+wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 
-# Virtual Environment
+# Environment variables
+.env
+.env.*
+.venv
+env/
 venv/
 ENV/
 
-# IDEs
+# IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-
-# Motoko/DFX
-.dfx/
-.vessel/
-.mops/
-
-# Node
-node_modules/
-npm-debug.log
-
-# Mac
 .DS_Store
 
-# Model files
-*.h5
-*.pkl
+# Logs and databases
+*.log
+*.sqlite
+lightning_logs/
+wandb/
+mlruns/
+checkpoints/
 
-# Misc
-*.log 
+# Project specific
+*.pkl
+*.h5
+*.pt
+*.pth
+*.ckpt
+*.model

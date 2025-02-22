@@ -150,27 +150,19 @@ class FeatureEngineer:
     def _scale_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Scale features using StandardScaler"""
         try:
-            # Initialize scalers for each symbol if not exists
-            for symbol in df['symbol'].unique():
-                if symbol not in self.scalers:
-                    self.scalers[symbol] = StandardScaler()
-                    
-            # Scale features for each symbol separately
-            scaled_dfs = []
-            for symbol in df['symbol'].unique():
-                symbol_df = df[df['symbol'] == symbol].copy()
+            # Get numeric columns
+            numeric_cols = df.select_dtypes(include=['float64', 'float32', 'int64', 'int32']).columns
+            
+            # Initialize scalers if needed
+            for col in numeric_cols:
+                if col not in self.scalers:
+                    self.scalers[col] = StandardScaler()
                 
-                # Get numeric columns
-                numeric_cols = symbol_df.select_dtypes(include=[np.number]).columns
+            # Scale each column
+            for col in numeric_cols:
+                df[col] = self.scalers[col].fit_transform(df[[col]])
                 
-                # Scale numeric features
-                if len(symbol_df) > 0:
-                    symbol_df[numeric_cols] = self.scalers[symbol].fit_transform(symbol_df[numeric_cols])
-                    
-                scaled_dfs.append(symbol_df)
-                
-            # Combine scaled DataFrames
-            return pd.concat(scaled_dfs)
+            return df
             
         except Exception as e:
             logger.error(f"Error scaling features: {str(e)}")
@@ -208,8 +200,9 @@ class FeatureEngineer:
             # Scale features
             df = self._scale_features(df)
             
-            # Convert to tensor
-            features = torch.tensor(df.drop(['timestamp', 'symbol'], axis=1).values, dtype=torch.float32)
+            # Drop non-numeric columns and convert to tensor
+            numeric_cols = df.select_dtypes(include=['float64', 'float32', 'int64', 'int32']).columns
+            features = torch.tensor(df[numeric_cols].values, dtype=torch.float32)
             
             return features
             

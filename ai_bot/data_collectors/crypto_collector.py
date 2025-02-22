@@ -1,202 +1,211 @@
 import os
 import logging
 import asyncio
+import aiohttp
+import hmac
+import hashlib
+import time
 from typing import Dict, Any, List
 import pandas as pd
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from binance.client import Client as BinanceClient
 from web3 import Web3
-import ccxt.async_support as ccxt
-from .base_collector import BaseDataCollector
 
 # Load environment variables
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-class CryptoDataCollector(BaseDataCollector):
+class CryptoDataCollector:
     """Collects cryptocurrency data from various sources"""
     
-    def __init__(self, symbols: List[str], timeframe: str = '1h', exchange_id: str = 'binance'):
+    def __init__(self, symbols: List[str], timeframe: str = '1h'):
         """
         Initialize the collector
         
         Args:
             symbols: List of trading pairs (e.g., ['BTC/USDT', 'ETH/USDT'])
             timeframe: Data timeframe (e.g., '1h', '4h', '1d')
-            exchange_id: Exchange to use (default: 'binance')
         """
-        super().__init__(symbols)
-        self.symbols = symbols
-        self.timeframe = timeframe
-        self.exchange_id = exchange_id
-        
-        # Initialize clients
-        self.binance = BinanceClient(
-            api_key=os.getenv('BINANCE_API_KEY'),
-            api_secret=os.getenv('BINANCE_API_SECRET')
-        )
+        self.symbols = [s.replace('/', '') for s in symbols]  # Convert BTC/USDT to BTCUSDT
+        self.timeframe = self._convert_timeframe(timeframe)
+        self.api_key = os.getenv('BINANCE_API_KEY')
+        self.api_secret = os.getenv('BINANCE_API_SECRET')
+        self.base_urls = [
+            'https://api.binance.com',
+            'https://api1.binance.com',
+            'https://api2.binance.com',
+            'https://api3.binance.com'
+        ]
         
         # Initialize Web3
         self.w3 = Web3(Web3.HTTPProvider(
             f"https://eth-mainnet.g.alchemy.com/v2/{os.getenv('ALCHEMY_API_KEY')}"
         ))
         
-        # Initialize async exchange with longer timeout
-        self.exchange = getattr(ccxt, exchange_id)({
-            'apiKey': os.getenv('BINANCE_API_KEY'),
-            'secret': os.getenv('BINANCE_API_SECRET'),
-            'enableRateLimit': True,
-            'timeout': 30000,  # 30 seconds timeout
-            'options': {
-                'defaultType': 'spot',  # Use spot market instead of futures
-                'adjustForTimeDifference': True,
-                'recvWindow': 60000,  # 60 seconds receive window
-                'warnOnFetchOHLCVLimitArgument': False,
-                'fetchCurrencies': False  # Skip fetching currencies to avoid rate limits
-            }
-        })
+    def _convert_timeframe(self, timeframe: str) -> str:
+        """Convert CCXT timeframe to Binance format"""
+        mapping = {
+            '1m': '1m', '3m': '3m', '5m': '5m', '15m': '15m',
+            '30m': '30m', '1h': '1h', '2h': '2h', '4h': '4h',
+            '6h': '6h', '8h': '8h', '12h': '12h', '1d': '1d',
+            '3d': '3d', '1w': '1w', '1M': '1M'
+        }
+        return mapping.get(timeframe, '1h')
         
+    def _get_signature(self, params: Dict[str, Any]) -> str:
+        """Generate signature for authenticated endpoints"""
+        query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+        return hmac.new(
+            self.api_secret.encode('utf-8'),
+            query_string.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
+        
+    async def _make_request(self, session: aiohttp.ClientSession, endpoint: str, 
+                          params: Dict[str, Any] = None, signed: bool = False) -> Dict:
+        """Make request to Binance API with fallback to alternative endpoints"""
+        if params is None:
+            params = {}
+            
+        if signed:
+            params['timestamp'] = int(time.time() * 1000)
+            params['signature'] = self._get_signature(params)
+            
+        headers = {'X-MBX-APIKEY': self.api_key} if signed else {}
+        
+        # Try each base URL in sequence
+        last_error = None
+        for base_url in self.base_urls:
+            url = f"{base_url}{endpoint}"
+            try:
+                async with session.get(url, params=params, headers=headers, timeout=10) as response:
+                    if response.status == 429:  # Rate limit
+                        retry_after = int(response.headers.get('Retry-After', 5))
+                        await asyncio.sleep(retry_after)
+                        continue
+                        
+                    response.raise_for_status()
+                    return await response.json()
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                last_error = e
+                logger.warning(f"Failed to connect to {base_url}: {str(e)}")
+                continue
+                
+        # If we get here, all endpoints failed
+        logger.error(f"All Binance API endpoints failed: {str(last_error)}")
+        raise last_error
+            
     async def collect_all_data(self) -> pd.DataFrame:
         """Collect all types of data and combine them"""
         try:
-            # Initialize exchange markets with retry
-            for attempt in range(3):
-                try:
-                    # Only load markets for the symbols we need
-                    markets = {}
-                    for symbol in self.symbols:
-                        try:
-                            # Use fetch_ohlcv instead of fetch_ticker for more reliable data
-                            ohlcv = await self.exchange.fetch_ohlcv(
-                                symbol,
-                                timeframe=self.timeframe,
-                                limit=1
-                            )
-                            if ohlcv and len(ohlcv) > 0:
-                                markets[symbol] = {
-                                    'last': ohlcv[0][4],  # Use closing price
-                                    'timestamp': ohlcv[0][0]
-                                }
-                            await asyncio.sleep(1)  # Rate limit compliance
-                        except Exception as e:
-                            logger.warning(f"Error fetching OHLCV for {symbol}: {str(e)}")
-                    
-                    if not markets:
-                        if attempt == 2:
-                            raise ValueError("Could not fetch any market data")
-                        continue
-                    break
-                    
-                except (ccxt.RequestTimeout, ccxt.ExchangeNotAvailable) as e:
-                    if attempt == 2:
-                        raise
-                    wait_time = 2 ** attempt
-                    logger.warning(f"Retrying market load after {wait_time}s, attempt {attempt + 2}")
-                    await asyncio.sleep(wait_time)  # Exponential backoff
-                    
-            # Collect different types of data concurrently
-            market_data, onchain_data = await asyncio.gather(
-                self.fetch_market_data(),
-                self.fetch_onchain_data(),
-                return_exceptions=True  # Don't let one failure stop everything
+            timeout = aiohttp.ClientTimeout(total=30)  # 30 seconds total timeout
+            connector = aiohttp.TCPConnector(
+                verify_ssl=True,
+                use_dns_cache=True,
+                ttl_dns_cache=300,  # 5 minutes DNS cache
+                limit=10  # Limit concurrent connections
             )
             
-            # Handle potential exceptions
-            if isinstance(market_data, Exception):
-                logger.error(f"Error fetching market data: {str(market_data)}")
-                market_data = pd.DataFrame()
-            
-            if isinstance(onchain_data, Exception):
-                logger.error(f"Error fetching onchain data: {str(onchain_data)}")
-                onchain_data = pd.DataFrame()
-            
-            # Combine all data
-            if not market_data.empty and not onchain_data.empty:
-                combined_data = pd.merge(
-                    market_data,
-                    onchain_data,
-                    left_index=True,
-                    right_index=True,
-                    how='left'
-                )
-            elif not market_data.empty:
-                combined_data = market_data
-            elif not onchain_data.empty:
-                combined_data = onchain_data
-            else:
-                raise ValueError("No data could be collected from any source")
-            
-            logger.info(f"Collected {len(combined_data)} data points")
-            return combined_data
-            
+            async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
+                # Collect market data
+                all_market_data = []
+                for symbol in self.symbols:
+                    try:
+                        # Get klines (OHLCV) data with retry
+                        for attempt in range(3):
+                            try:
+                                klines = await self._make_request(
+                                    session,
+                                    '/api/v3/klines',
+                                    {
+                                        'symbol': symbol,
+                                        'interval': self.timeframe,
+                                        'limit': 1000
+                                    }
+                                )
+                                break
+                            except Exception as e:
+                                if attempt == 2:
+                                    raise
+                                wait_time = 2 ** attempt
+                                logger.warning(f"Retrying klines fetch for {symbol} after {wait_time}s: {str(e)}")
+                                await asyncio.sleep(wait_time)
+                        
+                        # Convert to DataFrame
+                        df = pd.DataFrame(
+                            klines,
+                            columns=['timestamp', 'open', 'high', 'low', 'close', 'volume',
+                                    'close_time', 'quote_volume', 'trades', 'taker_buy_base',
+                                    'taker_buy_quote', 'ignore']
+                        )
+                        
+                        # Convert numeric columns to float
+                        numeric_columns = ['open', 'high', 'low', 'close', 'volume',
+                                         'quote_volume', 'trades', 'taker_buy_base',
+                                         'taker_buy_quote']
+                        df[numeric_columns] = df[numeric_columns].astype(float)
+                        
+                        df['symbol'] = symbol
+                        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                        df.set_index('timestamp', inplace=True)
+                        
+                        # Add order book data with retry
+                        for attempt in range(3):
+                            try:
+                                depth = await self._make_request(
+                                    session,
+                                    '/api/v3/depth',
+                                    {'symbol': symbol, 'limit': 100}
+                                )
+                                df['bid_ask_spread'] = float(depth['asks'][0][0]) - float(depth['bids'][0][0])
+                                df['order_book_depth'] = len(depth['asks']) + len(depth['bids'])
+                                break
+                            except Exception as e:
+                                if attempt == 2:
+                                    logger.warning(f"Failed to fetch order book for {symbol}: {str(e)}")
+                                    break
+                                wait_time = 2 ** attempt
+                                logger.warning(f"Retrying order book fetch for {symbol} after {wait_time}s")
+                                await asyncio.sleep(wait_time)
+                        
+                        all_market_data.append(df)
+                        await asyncio.sleep(0.1)  # Rate limit compliance
+                        
+                    except Exception as e:
+                        logger.warning(f"Error fetching data for {symbol}: {str(e)}")
+                        continue
+                        
+                if not all_market_data:
+                    raise ValueError("Could not fetch any market data")
+                    
+                # Combine market data
+                market_data = pd.concat(all_market_data)
+                
+                # Get on-chain data
+                try:
+                    onchain_data = await self.fetch_onchain_data()
+                except Exception as e:
+                    logger.warning(f"Error fetching on-chain data: {str(e)}")
+                    onchain_data = pd.DataFrame()
+                
+                # Combine all data
+                if not market_data.empty and not onchain_data.empty:
+                    combined_data = pd.merge(
+                        market_data,
+                        onchain_data,
+                        left_index=True,
+                        right_index=True,
+                        how='left'
+                    )
+                else:
+                    combined_data = market_data
+                
+                logger.info(f"Collected {len(combined_data)} data points")
+                return combined_data
+                
         except Exception as e:
             logger.error(f"Error collecting data: {str(e)}")
-            raise
-        finally:
-            try:
-                await self.exchange.close()
-            except Exception as e:
-                logger.error(f"Error closing exchange: {str(e)}")
-        
-    async def fetch_market_data(self) -> pd.DataFrame:
-        """Fetch market data including OHLCV and order book metrics"""
-        try:
-            all_data = []
-            
-            for symbol in self.symbols:
-                try:
-                    # Fetch OHLCV data with retry
-                    for attempt in range(3):  # Try 3 times
-                        try:
-                            ohlcv = await self.exchange.fetch_ohlcv(
-                                symbol,
-                                timeframe=self.timeframe,
-                                limit=1000  # Adjust as needed
-                            )
-                            break
-                        except ccxt.RequestTimeout:
-                            if attempt == 2:  # Last attempt
-                                raise
-                            await asyncio.sleep(1)  # Wait before retry
-                            
-                    # Convert to DataFrame
-                    df = pd.DataFrame(
-                        ohlcv,
-                        columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']
-                    )
-                    df['symbol'] = symbol
-                    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-                    df.set_index('timestamp', inplace=True)
-                    
-                    # Add order book metrics with retry
-                    for attempt in range(3):  # Try 3 times
-                        try:
-                            order_book = await self.exchange.fetch_order_book(symbol)
-                            df['bid_ask_spread'] = order_book['asks'][0][0] - order_book['bids'][0][0]
-                            df['order_book_depth'] = len(order_book['asks']) + len(order_book['bids'])
-                            break
-                        except ccxt.RequestTimeout:
-                            if attempt == 2:  # Last attempt
-                                raise
-                            await asyncio.sleep(1)  # Wait before retry
-                            
-                    all_data.append(df)
-                    
-                except Exception as e:
-                    logger.error(f"Error fetching data for {symbol}: {str(e)}")
-                    continue
-                
-            # Combine data from all symbols
-            if not all_data:
-                raise ValueError("No data collected from any symbol")
-                
-            market_data = pd.concat(all_data)
-            return market_data
-            
-        except Exception as e:
-            logger.error(f"Error fetching market data: {str(e)}")
             raise
             
     async def fetch_onchain_data(self) -> pd.DataFrame:
@@ -242,23 +251,3 @@ class CryptoDataCollector(BaseDataCollector):
         except Exception as e:
             logger.error(f"Error fetching on-chain data: {str(e)}")
             raise
-            
-    async def __aenter__(self):
-        """Async context manager entry"""
-        return self
-        
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit"""
-        await self.exchange.close()
-        
-    def __del__(self):
-        """Cleanup resources"""
-        try:
-            if hasattr(self, 'exchange'):
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    loop.create_task(self.exchange.close())
-                else:
-                    loop.run_until_complete(self.exchange.close())
-        except Exception as e:
-            logger.error(f"Error closing exchange connection: {str(e)}")

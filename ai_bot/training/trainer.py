@@ -16,27 +16,29 @@ logger = logging.getLogger(__name__)
 class ModelTrainer:
     """Advanced model training with MLOps integration"""
     
-    def __init__(self, config):
+    def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.setup_tracking()
         
     def setup_tracking(self):
         """Setup MLOps tracking tools"""
         try:
-            # Initialize W&B
-            wandb.init(
-                project=self.config.wandb_project,
-                config=self.config.to_dict(),
-                name=f"crypto_transformer_{wandb.util.generate_id()}"
-            )
+            # Initialize W&B if configured
+            if self.config.get('wandb', {}).get('enabled', False):
+                wandb.init(
+                    project=self.config['wandb']['project'],
+                    config=self.config,
+                    name=f"crypto_transformer_{wandb.util.generate_id()}"
+                )
             
-            # Initialize MLflow
-            mlflow.set_tracking_uri("http://localhost:5000")
-            mlflow.set_experiment("crypto_trading_bot")
+            # Initialize MLflow if configured
+            if self.config.get('mlflow', {}).get('enabled', False):
+                mlflow.set_tracking_uri(self.config['mlflow']['tracking_uri'])
+                mlflow.set_experiment(self.config['mlflow']['experiment_name'])
             
         except Exception as e:
-            logger.error(f"Error setting up tracking: {str(e)}")
-            raise
+            logger.warning(f"Error setting up tracking: {str(e)}")
+            logger.info("Continuing without MLOps tracking")
             
     def create_callbacks(self) -> list:
         """Create training callbacks"""
@@ -54,64 +56,63 @@ class ModelTrainer:
                 # Early stopping
                 EarlyStopping(
                     monitor='val_loss',
-                    patience=self.config.early_stopping_patience,
+                    patience=self.config.get('training', {}).get('early_stopping_patience', 10),
                     mode='min'
                 ),
                 
                 # Learning rate monitoring
-                LearningRateMonitor(logging_interval='step'),
-                
-                # Custom callback for uncertainty monitoring
-                UncertaintyMonitorCallback(),
-                
-                # Custom callback for trading metrics
-                TradingMetricsCallback()
+                LearningRateMonitor(logging_interval='step')
             ]
             
+            # Add custom callbacks
+            if self.config.get('training', {}).get('monitor_uncertainty', False):
+                callbacks.append(UncertaintyMonitorCallback())
+                
+            if self.config.get('training', {}).get('monitor_trading_metrics', False):
+                callbacks.append(TradingMetricsCallback())
+                
             return callbacks
             
         except Exception as e:
             logger.error(f"Error creating callbacks: {str(e)}")
             raise
             
-    async def train(self, data_module: CryptoDataModule) -> CryptoTransformerLightning:
+    def train(self, model: pl.LightningModule, data_module: CryptoDataModule):
         """Train the model"""
         try:
-            # Create model
-            model = CryptoTransformerLightning(self.config)
-            
-            # Setup logger
-            wandb_logger = WandbLogger(project=self.config.wandb_project)
-            
             # Create trainer
             trainer = pl.Trainer(
-                max_epochs=self.config.max_epochs,
+                max_epochs=self.config.get('training', {}).get('max_epochs', 100),
                 callbacks=self.create_callbacks(),
-                logger=wandb_logger,
                 accelerator='auto',
                 devices='auto',
-                precision=16 if self.config.use_mixed_precision else 32,
-                gradient_clip_val=self.config.gradient_clip_val
+                precision=self.config.get('training', {}).get('precision', 32),
+                gradient_clip_val=self.config.get('training', {}).get('gradient_clip_val', 0.5)
             )
             
-            # Start MLflow run
-            with mlflow.start_run() as run:
-                # Log parameters
-                mlflow.log_params(self.config.to_dict())
+            # Start MLflow run if configured
+            if self.config.get('mlflow', {}).get('enabled', False):
+                with mlflow.start_run() as run:
+                    # Log parameters
+                    mlflow.log_params(self.config)
+                    
+                    # Train model
+                    trainer.fit(model, data_module)
+                    
+                    # Log metrics
+                    mlflow.log_metrics(trainer.callback_metrics)
+                    
+                    # Log model
+                    mlflow.pytorch.log_model(model, "model")
+                    
+            else:
+                # Train model without MLflow
+                trainer.fit(model, data_module)
                 
-                # Train model
-                await trainer.fit(model, data_module)
-                
-                # Log metrics
-                mlflow.log_metrics(trainer.callback_metrics)
-                
-                # Log model
-                mlflow.pytorch.log_model(model, "model")
-                
-            return model
+            return trainer
             
         except Exception as e:
-            logger.error(f"Error during training: {str(e)}")
+            logger.error(f"Error training model: {str(e)}")
             raise
             
     async def hyperparameter_optimization(
@@ -124,11 +125,11 @@ class ModelTrainer:
             async def objective(trial: optuna.Trial) -> float:
                 # Define hyperparameter search space
                 config = self.config
-                config.learning_rate = trial.suggest_loguniform('learning_rate', 1e-5, 1e-3)
-                config.dropout = trial.suggest_uniform('dropout', 0.1, 0.5)
-                config.nhead = trial.suggest_categorical('nhead', [4, 8, 16])
-                config.num_encoder_layers = trial.suggest_int('num_encoder_layers', 2, 8)
-                config.num_decoder_layers = trial.suggest_int('num_decoder_layers', 2, 8)
+                config['learning_rate'] = trial.suggest_loguniform('learning_rate', 1e-5, 1e-3)
+                config['dropout'] = trial.suggest_uniform('dropout', 0.1, 0.5)
+                config['nhead'] = trial.suggest_categorical('nhead', [4, 8, 16])
+                config['num_encoder_layers'] = trial.suggest_int('num_encoder_layers', 2, 8)
+                config['num_decoder_layers'] = trial.suggest_int('num_decoder_layers', 2, 8)
                 
                 # Create model and trainer
                 model = CryptoTransformerLightning(config)

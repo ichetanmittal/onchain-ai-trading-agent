@@ -59,8 +59,11 @@ class TradingBotController:
             # Initialize trainer
             self.trainer = ModelTrainer(self.config)
             
+            # Create model
+            model = CryptoTransformerLightning(self.config)
+            
             # Train model
-            model = await self.trainer.train(self.data_module)
+            await self.trainer.train(model, self.data_module)
             
             return model
             
