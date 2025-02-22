@@ -1,7 +1,46 @@
 # requirements.txt
-yfinance
-pandas
-numpy
-tensorflow
-scikit-learn
-matplotlib
+# Core ML and Data Processing
+tensorflow>=2.15.0
+torch>=2.2.0
+transformers>=4.37.0
+pandas>=2.2.0
+numpy>=1.26.0
+scikit-learn>=1.4.0
+
+# Advanced ML Libraries
+pytorch-lightning>=2.1.0
+optuna>=3.5.0
+ray[tune]>=2.9.0
+shap>=0.44.0
+
+# Crypto and Financial Data
+yfinance>=0.2.35
+ccxt>=4.2.0
+ta>=0.10.0  # Technical Analysis
+web3>=6.15.0
+
+# Time Series Specific
+darts>=0.27.0  # Time series library
+prophet>=1.1.5
+
+# Data Collection and Processing
+python-binance>=1.0.19
+requests>=2.31.0
+aiohttp>=3.9.0
+beautifulsoup4>=4.12.0
+
+# Monitoring and MLOps
+mlflow>=2.10.0
+wandb>=0.16.0
+great-expectations>=0.18.0
+
+# Visualization
+matplotlib>=3.8.0
+plotly>=5.18.0
+seaborn>=0.13.0
+
+# Development Tools
+jupyter>=1.0.0
+python-dotenv>=1.0.0
+black>=24.1.0
+pytest>=8.0.0

@@ -12,5 +12,47 @@
     "predicted_price": 3774.4208984375,
     "current_price": 3682.6328125,
     "is_valid": true
+  },
+  {
+    "timestamp": "2025-02-22T12:58:56.992508",
+    "ticker": "BTCUSDT",
+    "predicted_price": 96616.1328125,
+    "current_price": 96450.01,
+    "is_valid": true
+  },
+  {
+    "timestamp": "2025-02-22T12:58:59.938317",
+    "ticker": "ETHUSDT",
+    "predicted_price": 2721.374755859375,
+    "current_price": 2691.61,
+    "is_valid": true
+  },
+  {
+    "timestamp": "2025-02-22T13:00:35.325441",
+    "ticker": "BTCUSDT",
+    "predicted_price": 100158.1015625,
+    "current_price": 96435.36,
+    "is_valid": false
+  },
+  {
+    "timestamp": "2025-02-22T13:00:38.314078",
+    "ticker": "ETHUSDT",
+    "predicted_price": 2640.6650390625,
+    "current_price": 2689.66,
+    "is_valid": false
+  },
+  {
+    "timestamp": "2025-02-22T13:04:28.244335",
+    "ticker": "BTCUSDT",
+    "predicted_price": 100472.765625,
+    "current_price": 96432.62,
+    "is_valid": true
+  },
+  {
+    "timestamp": "2025-02-22T13:04:31.013182",
+    "ticker": "ETHUSDT",
+    "predicted_price": 2681.934814453125,
+    "current_price": 2688.44,
+    "is_valid": true
   }
 ]
