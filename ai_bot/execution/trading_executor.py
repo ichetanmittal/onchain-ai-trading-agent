@@ -3,10 +3,17 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd
 import numpy as np
 from datetime import datetime
-import subprocess
 import os
 import json
 import logging
+import torch
+import subprocess
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+
 from ..strategies.portfolio_optimizer import ModernPortfolioOptimizer, PortfolioMetrics
 from ..models.transformer_model import CryptoTransformerLightning
 
@@ -23,99 +30,112 @@ class TradingExecutor:
         self.trade_history: List[Dict] = []
         
     async def execute_trading_cycle(self):
-        """Execute one complete trading cycle"""
+        """Execute one trading cycle"""
         try:
-            # 1. Get latest market data and predictions
+            # Get predictions from model
             predictions, uncertainties = await self._get_predictions()
+            logger.info(f"Predictions shape: {predictions.shape}")
+            logger.info(f"Uncertainties shape: {uncertainties.shape}")
             
-            # 2. Get current portfolio state from ICP
+            # Convert predictions to dict for optimizer
+            pred_dict = {}
+            uncert_dict = {}
+            symbols = self.config.get('data', {}).get('symbols', ['BTC/USDT', 'ETH/USDT'])
+            for i, symbol in enumerate(symbols):
+                pred_dict[symbol] = predictions[i].item()  # Each prediction is a scalar
+                uncert_dict[symbol] = uncertainties[i].item()
+            
+            # Get current portfolio from ICP canister
             current_portfolio = await self._get_portfolio_from_icp()
             
-            # 3. Optimize portfolio
-            new_weights, metrics = await self.portfolio_optimizer.optimize_portfolio(
-                predictions,
-                uncertainties,
-                current_portfolio,
-                await self._fetch_market_data()
+            # Get market data for risk calculations
+            market_data = await self._fetch_market_data()
+            
+            # Optimize portfolio allocation
+            optimizer = ModernPortfolioOptimizer(self.config)
+            target_portfolio, metrics = await optimizer.optimize_portfolio(
+                predictions=pred_dict,
+                uncertainties=uncert_dict,
+                current_weights=current_portfolio,
+                market_data=market_data
             )
             
-            # 4. Apply risk management checks
-            if not self._validate_risk_metrics(metrics):
-                logger.warning("Risk metrics exceeded thresholds, maintaining current positions")
-                return
+            # Generate trades to reach target allocation
+            trades = self._generate_trades(current_portfolio, target_portfolio)
             
-            # 5. Calculate required trades
-            trades = self._calculate_trades(current_portfolio, new_weights)
+            # Execute trades through ICP canister
+            await self._execute_trades_on_icp(trades)
             
-            # 6. Execute trades through ICP
-            if trades:
-                success = await self._execute_trades_on_icp(trades)
-                if success:
-                    self._update_trade_history(trades, predictions, metrics)
-                    
-            # 7. Log execution metrics
+            # Update trade history
+            self._update_trade_history(trades, predictions, metrics)
+            
+            # Log execution metrics
             self._log_execution_metrics(predictions, metrics, trades)
             
         except Exception as e:
             logger.error(f"Error in trading cycle: {str(e)}")
             raise
             
-    async def _get_predictions(self) -> Tuple[Dict[str, float], Dict[str, float]]:
-        """Get predictions and uncertainties from the model"""
+    async def _get_predictions(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Get predictions from the model"""
         try:
-            # Get latest data
             data_module = self.model.trainer.datamodule
             latest_data = await data_module.get_latest_data()
             
-            # Make predictions
+            # Move to same device as model
+            latest_data = latest_data.to(self.model.device)
+            
             with torch.no_grad():
                 predictions, uncertainties = self.model(latest_data)
-            
-            # Convert to dictionaries
-            pred_dict = {}
-            uncert_dict = {}
-            for i, symbol in enumerate(self.config.symbols):
-                pred_dict[symbol] = predictions[0, -1, i].item()
-                uncert_dict[symbol] = uncertainties[0, -1, i].item()
-                
-            return pred_dict, uncert_dict
+            return predictions, uncertainties
             
         except Exception as e:
-            logger.error(f"Error getting predictions: {str(e)}")
+            logger.error(f"Error in getting predictions: {str(e)}")
             raise
             
     async def _get_portfolio_from_icp(self) -> Dict[str, float]:
         """Get current portfolio state from ICP canister"""
         try:
-            # Change to directory with dfx.json
-            original_dir = os.getcwd()
-            os.chdir("motoko_contracts")
-            
-            # Call canister
             result = subprocess.run(
-                ["dfx", "canister", "call", "motoko_contracts_backend", "getPortfolio"],
+                [
+                    "dfx", "canister", "call", 
+                    "motoko_contracts_backend", 
+                    "getPortfolio"
+                ],
                 capture_output=True,
                 text=True,
-                check=True
+                check=True,
+                cwd="/Users/chetanmittal/Desktop/icp-ai-trading-bot/motoko_contracts"
             )
             
-            # Parse result
-            portfolio = json.loads(result.stdout)
+            # Log raw response for debugging
+            logger.debug(f"Raw ICP response: {result.stdout}")
             
-            # Change back to original directory
-            os.chdir(original_dir)
+            # Parse canister response format: (record { btc = 1000.0 : float64; eth = 1000.0 : float64 })
+            portfolio_str = result.stdout.strip()
+            btc_val = float(portfolio_str.split('btc = ')[1].split(' :')[0])
+            eth_val = float(portfolio_str.split('eth = ')[1].split(' :')[0])
             
-            return portfolio
+            logger.info(f"Parsed portfolio values - BTC: {btc_val}, ETH: {eth_val}")
+            
+            return {
+                'BTC/USDT': btc_val,
+                'ETH/USDT': eth_val
+            }
             
         except Exception as e:
             logger.error(f"Error getting portfolio from ICP: {str(e)}")
-            raise
-            
+            # Return dummy portfolio for now
+            return {
+                'BTC/USDT': 1000.0,
+                'ETH/USDT': 1000.0
+            }
+
     async def _fetch_market_data(self) -> pd.DataFrame:
         """Fetch recent market data for analysis"""
         try:
             data_module = self.model.trainer.datamodule
-            raw_data = await data_module.data_collector.fetch_market_data()
+            raw_data = await data_module.data_collector.collect_data()
             return raw_data
             
         except Exception as e:
@@ -125,133 +145,154 @@ class TradingExecutor:
     def _validate_risk_metrics(self, metrics: PortfolioMetrics) -> bool:
         """Validate portfolio risk metrics against thresholds"""
         # Check volatility
-        if metrics.volatility > self.config.max_volatility:
-            logger.warning(f"Portfolio volatility {metrics.volatility:.2f} exceeds threshold {self.config.max_volatility:.2f}")
+        if metrics.volatility > self.config['trading']['max_volatility']:
+            logger.warning(f"Portfolio volatility {metrics.volatility:.2f} exceeds threshold {self.config['trading']['max_volatility']:.2f}")
             return False
             
         # Check Value at Risk
-        if abs(metrics.var_95) > self.config.max_var:
-            logger.warning(f"Portfolio VaR {abs(metrics.var_95):.2f} exceeds threshold {self.config.max_var:.2f}")
+        if abs(metrics.var_95) > self.config['trading']['max_var']:
+            logger.warning(f"Portfolio VaR {abs(metrics.var_95):.2f} exceeds threshold {self.config['trading']['max_var']:.2f}")
             return False
             
         # Check maximum drawdown
-        if metrics.max_drawdown > self.config.max_drawdown:
-            logger.warning(f"Portfolio drawdown {metrics.max_drawdown:.2f} exceeds threshold {self.config.max_drawdown:.2f}")
+        if metrics.max_drawdown > self.config['trading']['max_drawdown']:
+            logger.warning(f"Portfolio drawdown {metrics.max_drawdown:.2f} exceeds threshold {self.config['trading']['max_drawdown']:.2f}")
             return False
             
         # Check Sharpe ratio
-        if metrics.sharpe_ratio < self.config.min_sharpe_ratio:
-            logger.warning(f"Portfolio Sharpe ratio {metrics.sharpe_ratio:.2f} below threshold {self.config.min_sharpe_ratio:.2f}")
+        if metrics.sharpe_ratio < self.config['trading']['min_sharpe_ratio']:
+            logger.warning(f"Portfolio Sharpe ratio {metrics.sharpe_ratio:.2f} below threshold {self.config['trading']['min_sharpe_ratio']:.2f}")
             return False
             
         return True
         
-    def _calculate_trades(
+    def _generate_trades(
         self,
         current_portfolio: Dict[str, float],
-        target_weights: Dict[str, float]
+        target_portfolio: Dict[str, float]
     ) -> List[Dict]:
-        """Calculate required trades to achieve target weights"""
+        """Generate trades to move from current to target portfolio"""
         trades = []
         total_value = sum(current_portfolio.values())
         
-        for symbol, target_weight in target_weights.items():
-            current_weight = current_portfolio.get(symbol, 0) / total_value
+        for symbol in current_portfolio:
+            current_weight = current_portfolio[symbol] / total_value
+            target_weight = target_portfolio[symbol] / total_value
             weight_diff = target_weight - current_weight
             
-            if abs(weight_diff) > self.config.min_trade_size:
+            # Only trade if difference exceeds minimum size
+            if abs(weight_diff) > self.config['trading']['min_trade_size']:
                 trades.append({
                     'symbol': symbol,
                     'action': 'buy' if weight_diff > 0 else 'sell',
-                    'amount': abs(weight_diff) * total_value
+                    'amount': abs(weight_diff) * total_value,
+                    'prediction': target_weight
                 })
                 
         return trades
         
-    async def _execute_trades_on_icp(self, trades: List[Dict]) -> bool:
+    async def _execute_trades_on_icp(self, trades: List[Dict]) -> None:
         """Execute trades through ICP canister"""
         try:
-            # Change to directory with dfx.json
-            original_dir = os.getcwd()
-            os.chdir("motoko_contracts")
+            # First set the predictions on the canister
+            predictions = {t['symbol']: t['prediction'] for t in trades}
             
-            for trade in trades:
-                # Prepare trade parameters
-                params = json.dumps({
-                    'symbol': trade['symbol'],
-                    'action': trade['action'],
-                    'amount': trade['amount']
-                })
-                
-                # Execute trade through canister
-                result = subprocess.run(
-                    ["dfx", "canister", "call", "motoko_contracts_backend", "executeTrade", params],
-                    capture_output=True,
-                    text=True,
-                    check=True
-                )
-                
-                if "Error" in result.stdout:
-                    logger.error(f"Trade execution failed: {result.stdout}")
-                    return False
-                    
-            # Change back to original directory
-            os.chdir(original_dir)
-            
-            return True
-            
+            # Run dfx from the motoko_contracts directory
+            result = subprocess.run(
+                [
+                    "dfx", "canister", "call", 
+                    "motoko_contracts_backend", 
+                    "setPredictions", 
+                    f"({predictions.get('BTC/USDT', 0.0)}, {predictions.get('ETH/USDT', 0.0)})"
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+                cwd="/Users/chetanmittal/Desktop/icp-ai-trading-bot/motoko_contracts"
+            )
+            logger.info("Set predictions on ICP canister")
+
+            # Trigger rebalance
+            result = subprocess.run(
+                [
+                    "dfx", "canister", "call", 
+                    "motoko_contracts_backend", 
+                    "rebalance"
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+                cwd="/Users/chetanmittal/Desktop/icp-ai-trading-bot/motoko_contracts"
+            )
+            logger.info(f"Rebalance result: {result.stdout}")
+
         except Exception as e:
             logger.error(f"Error executing trades on ICP: {str(e)}")
-            return False
-            
+            raise
+
     def _update_trade_history(
         self,
         trades: List[Dict],
-        predictions: Dict[str, float],
+        predictions: torch.Tensor,
         metrics: PortfolioMetrics
-    ):
+    ) -> None:
         """Update trade history with execution details"""
-        for trade in trades:
-            self.trade_history.append({
-                'timestamp': datetime.now().isoformat(),
-                'symbol': trade['symbol'],
-                'action': trade['action'],
-                'amount': trade['amount'],
-                'predicted_price': predictions[trade['symbol']],
-                'portfolio_metrics': {
-                    'sharpe_ratio': metrics.sharpe_ratio,
-                    'volatility': metrics.volatility,
-                    'var_95': metrics.var_95
+        try:
+            # Convert predictions to dictionary
+            pred_dict = {
+                self.config['data']['symbols'][i]: pred.item()
+                for i, pred in enumerate(predictions)
+            }
+            
+            for trade in trades:
+                trade_record = {
+                    'timestamp': datetime.now().isoformat(),
+                    'symbol': trade['symbol'],
+                    'action': trade['action'],
+                    'amount': trade['amount'],
+                    'predicted_price': pred_dict[trade['symbol']],
+                    'portfolio_metrics': {
+                        'sharpe_ratio': metrics.sharpe_ratio,
+                        'volatility': metrics.volatility,
+                        'var_95': metrics.var_95,
+                        'max_drawdown': metrics.max_drawdown
+                    }
                 }
-            })
+                
+                self.trade_history.append(trade_record)
+                logger.info(f"Trade recorded: {trade_record}")
+                
+        except Exception as e:
+            logger.error(f"Error updating trade history: {str(e)}")
             
     def _log_execution_metrics(
         self,
-        predictions: Dict[str, float],
+        predictions: torch.Tensor,
         metrics: PortfolioMetrics,
         trades: List[Dict]
     ):
-        """Log execution metrics to monitoring system"""
+        """Log execution metrics to wandb if available"""
         try:
-            # Log to W&B
-            wandb.log({
-                'portfolio_value': sum(self.current_positions.values()),
-                'portfolio_sharpe': metrics.sharpe_ratio,
-                'portfolio_volatility': metrics.volatility,
-                'portfolio_var': metrics.var_95,
-                'portfolio_cvar': metrics.cvar_95,
-                'trade_count': len(trades),
-                'total_trade_value': sum(trade['amount'] for trade in trades)
-            })
-            
-            # Log to MLflow
-            with mlflow.start_run(nested=True):
-                mlflow.log_metrics({
-                    'portfolio_sharpe': metrics.sharpe_ratio,
-                    'portfolio_volatility': metrics.volatility,
-                    'trade_count': len(trades)
-                })
+            if not WANDB_AVAILABLE:
+                return
                 
+            wandb.log({
+                'sharpe_ratio': metrics.sharpe_ratio,
+                'volatility': metrics.volatility,
+                'var_95': metrics.var_95,
+                'max_drawdown': metrics.max_drawdown,
+                'trade_count': len(trades),
+                'total_trade_volume': sum(trade['amount'] for trade in trades)
+            })
         except Exception as e:
             logger.error(f"Error logging execution metrics: {str(e)}")
+            
+    async def run(self):
+        """Run continuous trading execution"""
+        try:
+            logger.info("Starting trading execution...")
+            await self.execute_trading_cycle()
+            
+        except Exception as e:
+            logger.error(f"Error in trading execution: {str(e)}")
             raise

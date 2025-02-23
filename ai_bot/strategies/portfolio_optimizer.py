@@ -40,54 +40,60 @@ class ModernPortfolioOptimizer:
     ) -> Tuple[Dict[str, float], PortfolioMetrics]:
         """
         Optimize portfolio weights using modern portfolio theory and risk management
-        
-        Args:
-            predictions: Dictionary of predicted returns for each asset
-            uncertainties: Dictionary of prediction uncertainties
-            current_weights: Current portfolio weights
-            market_data: Historical market data for risk calculations
-            
-        Returns:
-            Tuple of (optimal weights, portfolio metrics)
         """
         try:
-            # Calculate returns and covariance
+            # Calculate returns and covariance first
             returns = self._calculate_returns(market_data)
             cov_matrix = self._calculate_covariance(returns)
             
-            # Adjust expected returns based on uncertainties
-            adjusted_returns = {
-                symbol: pred * (1 - uncertainties[symbol])
-                for symbol, pred in predictions.items()
-            }
+            # Convert predictions and uncertainties to arrays
+            pred_array = np.array([predictions[s] for s in self.symbols])
+            uncert_array = np.array([uncertainties[s] for s in self.symbols])
             
-            # Setup optimization constraints
+            n_assets = len(self.symbols)
+            x0 = np.ones(n_assets) / n_assets
+            bounds = [(0.2, 0.8) for _ in range(n_assets)]
+            
             constraints = [
-                {'type': 'eq', 'fun': lambda x: np.sum(x) - 1},  # weights sum to 1
-                {'type': 'ineq', 'fun': lambda x: self.max_position_size - np.abs(x)}  # position size limits
+                {
+                    'type': 'eq',
+                    'fun': lambda x: np.sum(x) - 1.0
+                }
             ]
             
-            bounds = [(0, self.max_position_size) for _ in self.symbols]
+            def objective(weights):
+                # Penalize deviation from predictions
+                prediction_alignment = -np.sum(weights * pred_array)
+                
+                # Penalize high uncertainty
+                uncertainty_penalty = np.sum(weights * uncert_array)
+                
+                # Add L2 regularization to prevent extreme allocations
+                l2_reg = 0.1 * np.sum(weights ** 2)
+                
+                return prediction_alignment + uncertainty_penalty + l2_reg
             
-            # Initial guess (equal weights)
-            x0 = np.array([1.0/len(self.symbols)] * len(self.symbols))
-            
-            # Optimize
             result = minimize(
-                self._objective_function,
+                objective,
                 x0,
-                args=(adjusted_returns, cov_matrix),
                 method='SLSQP',
                 bounds=bounds,
-                constraints=constraints
+                constraints=constraints,
+                options={'ftol': 1e-6, 'maxiter': 1000}
             )
             
             if not result.success:
-                logger.warning(f"Portfolio optimization failed: {result.message}")
+                logger.warning(f"Portfolio optimization warning: {result.message}")
                 return current_weights, self._calculate_metrics(current_weights, returns, cov_matrix)
             
-            # Create weights dictionary
-            optimal_weights = dict(zip(self.symbols, result.x))
+            # Ensure weights sum to 1 and respect bounds
+            weights = np.clip(result.x, 0.2, 0.8)
+            weights = weights / np.sum(weights)
+            
+            optimal_weights = {
+                symbol: float(weight)
+                for symbol, weight in zip(self.symbols, weights)
+            }
             
             # Calculate portfolio metrics
             metrics = self._calculate_metrics(optimal_weights, returns, cov_matrix)
@@ -95,8 +101,17 @@ class ModernPortfolioOptimizer:
             return optimal_weights, metrics
             
         except Exception as e:
-            logger.error(f"Error in portfolio optimization: {str(e)}")
-            return current_weights, self._calculate_metrics(current_weights, returns, cov_matrix)
+            logger.error(f"Portfolio optimization failed: {str(e)}")
+            # Fallback to equal weights
+            weight = 1.0 / len(self.symbols)
+            equal_weights = {symbol: weight for symbol in self.symbols}
+            
+            # Still need returns for metrics
+            returns = self._calculate_returns(market_data)
+            cov_matrix = self._calculate_covariance(returns)
+            metrics = self._calculate_metrics(equal_weights, returns, cov_matrix)
+            
+            return equal_weights, metrics
             
     def _objective_function(
         self,
@@ -136,11 +151,12 @@ class ModernPortfolioOptimizer:
         sharpe = (portfolio_return - self.risk_free_rate) / portfolio_vol
         
         # Calculate historical portfolio values
-        portfolio_values = pd.Series(1)
+        portfolio_returns = pd.Series(0.0, index=returns.index)
         for t in returns.index:
-            daily_return = sum(returns.loc[t, sym] * weights[sym] for sym in self.symbols)
-            portfolio_values[t] = portfolio_values[t-1] * (1 + daily_return)
+            portfolio_returns[t] = sum(returns.loc[t, sym] * weights[sym] for sym in self.symbols)
             
+        portfolio_values = (1 + portfolio_returns).cumprod()
+        
         # Maximum drawdown
         rolling_max = portfolio_values.expanding().max()
         drawdowns = (portfolio_values - rolling_max) / rolling_max
@@ -163,7 +179,13 @@ class ModernPortfolioOptimizer:
         
     def _calculate_returns(self, market_data: pd.DataFrame) -> pd.DataFrame:
         """Calculate historical returns"""
-        return market_data.pct_change().dropna()
+        # Pivot data to get price series for each symbol
+        prices = market_data.pivot(index='timestamp', columns='symbol', values='close')
+        
+        # Calculate returns
+        returns = prices.pct_change().dropna()
+        
+        return returns
         
     def _calculate_covariance(
         self,

@@ -19,6 +19,7 @@ class ModelTrainer:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.setup_tracking()
+        self.trainer = None
         
     def setup_tracking(self):
         """Setup MLOps tracking tools"""
@@ -81,7 +82,7 @@ class ModelTrainer:
         """Train the model"""
         try:
             # Create trainer
-            trainer = pl.Trainer(
+            self.trainer = pl.Trainer(
                 max_epochs=self.config.get('training', {}).get('max_epochs', 100),
                 callbacks=self.create_callbacks(),
                 accelerator='auto',
@@ -97,15 +98,33 @@ class ModelTrainer:
                     mlflow.log_params(self.config)
                     
                     # Train model
-                    trainer.fit(model, data_module)
+                    self.trainer.fit(model, data_module)
             else:
                 # Train model without MLflow
-                trainer.fit(model, data_module)
+                self.trainer.fit(model, data_module)
                 
             return model
             
         except Exception as e:
             logger.error(f"Error training model: {str(e)}")
+            raise
+            
+    def setup_model(self, model: pl.LightningModule):
+        """Setup model for inference"""
+        try:
+            if self.trainer is None:
+                # Create trainer for inference
+                self.trainer = pl.Trainer(
+                    accelerator='auto',
+                    devices='auto',
+                    precision=self.config.get('training', {}).get('precision', 32)
+                )
+                
+            # Attach trainer to model
+            model.trainer = self.trainer
+            
+        except Exception as e:
+            logger.error(f"Error setting up model: {str(e)}")
             raise
             
     def hyperparameter_optimization(self, data_module: CryptoDataModule):

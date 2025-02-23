@@ -114,6 +114,48 @@ class CryptoDataModule(pl.LightningDataModule):
             logger.error(f"Error preparing data: {str(e)}")
             raise
             
+    async def get_latest_data(self) -> torch.Tensor:
+        """Get latest market data for prediction"""
+        try:
+            # Collect latest data
+            latest_market_data = await self.data_collector.collect_data()
+            
+            # Engineer features
+            features = self.feature_engineer.create_features({
+                'market_data': latest_market_data
+            })
+            
+            # Create sequences for each symbol
+            sequences = []
+            for symbol in self.symbols:
+                symbol_mask = features['symbol'] == symbol
+                symbol_features = features[symbol_mask].sort_values('timestamp')
+                
+                if symbol_features.empty:
+                    logger.warning(f"No data found for symbol {symbol}")
+                    continue
+                
+                # Convert to numpy for faster processing
+                feature_array = symbol_features.drop(['symbol', 'timestamp'], axis=1).values
+                
+                # Take the latest sequence
+                if len(feature_array) >= self.sequence_length:
+                    x = feature_array[-self.sequence_length:]
+                    sequences.append(x)
+                else:
+                    logger.warning(f"Not enough data for a full sequence for {symbol}")
+                    
+            if not sequences:
+                raise ValueError("No sequences could be created from latest data")
+                
+            # Convert to tensor and reshape for transformer (batch_size, seq_len, input_dim)
+            X = torch.tensor(sequences, dtype=torch.float32)
+            return X  # Shape: (num_symbols, seq_len, input_dim)
+            
+        except Exception as e:
+            logger.error(f"Error getting latest data: {str(e)}")
+            raise
+            
     def setup(self, stage: Optional[str] = None):
         """Setup data for training/validation"""
         pass  # Data is already prepared in prepare_data
