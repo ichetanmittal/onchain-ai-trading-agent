@@ -1,0 +1,54 @@
+{
+    "data": {
+        "symbols": ["BTC/USDT", "ETH/USDT"],
+        "timeframe": "1h",
+        "sequence_length": 60,
+        "prediction_horizon": 12
+    },
+    
+    "model": {
+        "input_dim": 38,
+        "output_dim": 1,
+        "d_model": 256,
+        "nhead": 8,
+        "num_encoder_layers": 6,
+        "num_decoder_layers": 6,
+        "dim_feedforward": 1024,
+        "dropout": 0.1,
+        "activation": "relu"
+    },
+    
+    "training": {
+        "max_epochs": 100,
+        "batch_size": 32,
+        "learning_rate": 0.001,
+        "early_stopping_patience": 10,
+        "gradient_clip_val": 0.5,
+        "precision": 32,
+        "monitor_uncertainty": false,
+        "monitor_trading_metrics": false
+    },
+    
+    "trading": {
+        "portfolio_rebalance_interval": 24,
+        "risk_free_rate": 0.02,
+        "target_volatility": 0.15,
+        "max_volatility": 0.25,
+        "max_var": 0.1,
+        "max_drawdown": 0.3,
+        "min_sharpe_ratio": -5.0,
+        "max_position_size": 0.2,
+        "min_trade_size": 0.05
+    },
+    
+    "wandb": {
+        "enabled": false,
+        "project": "crypto-trading-bot"
+    },
+    
+    "mlflow": {
+        "enabled": false,
+        "tracking_uri": "http://localhost:5000",
+        "experiment_name": "crypto_trading_bot"
+    }
+}

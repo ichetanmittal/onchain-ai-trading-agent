@@ -1,39 +1,83 @@
-# On-Chain AI Trading Agent
+# Advanced On-Chain AI Trading Agent
 
-An AI-powered trading bot that makes Bitcoin price predictions and stores them on the Internet Computer blockchain.
+A state-of-the-art AI-powered trading bot that leverages transformer models, multi-modal data, and the Internet Computer blockchain for cryptocurrency trading.
 
-## Project Structure
+## Modern Architecture
 
 ```
 .
 ├── ai_bot/
-│   └── ai_trading_model.py    # LSTM model for BTC price prediction
-└── motoko_contracts/          # Internet Computer smart contracts
-    ├── src/
-    │   ├── motoko_contracts_backend/    # Motoko backend
-    │   └── motoko_contracts_frontend/   # Frontend interface
-    └── dfx.json
+│   ├── config/
+│   │   └── model_config.py          # Configuration management
+│   ├── data/
+│   │   └── data_module.py           # PyTorch Lightning data module
+│   ├── data_collectors/
+│   │   ├── base_collector.py        # Abstract data collector
+│   │   └── crypto_collector.py      # Crypto-specific collector
+│   ├── features/
+│   │   └── feature_engineer.py      # Advanced feature engineering
+│   ├── models/
+│   │   └── transformer_model.py     # Transformer architecture
+│   ├── training/
+│   │   └── trainer.py               # MLOps-integrated training
+│   ├── strategies/
+│   │   └── portfolio_optimizer.py   # Modern portfolio optimization
+│   ├── execution/
+│   │   └── trading_executor.py      # Trading execution system
+│   └── controller.py                # Main orchestrator
+├── motoko_contracts/                # Internet Computer smart contracts
+│   └── src/
+│       └── motoko_contracts_backend/
+└── main.py                         # Entry point
 ```
 
-## Features
+## Key Features
 
-- LSTM-based Bitcoin price prediction
-- Real-time data fetching using yfinance
-- On-chain storage of predictions using Internet Computer
-- Performance metrics (RMSE, MAE)
+### Data Collection
+- Real-time market data (OHLCV and order book metrics)
+- On-chain metrics (transactions, gas prices)
+- Social sentiment analysis
+- DeFi metrics (TVL, yields)
+
+### Advanced ML Architecture
+- Transformer-based model with self-attention
+- Uncertainty quantification
+- Multi-modal data integration
+- Real-time adaptation
+
+### MLOps Integration
+- Experiment tracking with Weights & Biases
+- Model versioning with MLflow
+- Hyperparameter optimization with Optuna
+- Automated retraining pipeline
+
+### Portfolio Management
+- Modern portfolio theory implementation
+- Risk-adjusted optimization
+- Advanced risk metrics (VaR, CVaR)
+- Dynamic rebalancing
+
+### Trading Execution
+- ICP blockchain integration
+- Real-time trade execution
+- Performance monitoring
+- Risk management checks
 
 ## Requirements
 
+See `requirements.txt` for full dependencies. Key packages:
+
 ```
-yfinance
-pandas
-numpy
-tensorflow
-scikit-learn
-matplotlib
+tensorflow>=2.15.0
+torch>=2.2.0
+transformers>=4.37.0
+pytorch-lightning>=2.1.0
+wandb>=0.16.0
+mlflow>=2.10.0
+optuna>=3.5.0
 ```
 
-## Setup
+## Setup and Usage
 
 1. Install dependencies:
 ```bash
@@ -47,18 +91,77 @@ dfx start --background
 dfx deploy
 ```
 
-3. Run the AI model:
+3. Run the trading bot:
 ```bash
-python ai_bot/ai_trading_model.py
+# Training mode
+python main.py --mode train
+
+# Hyperparameter optimization
+python main.py --mode optimize --trials 100
+
+# Trading mode
+python main.py --mode trade --interval 3600
 ```
 
-## How it Works
+## Mainnet Deployment
 
-1. The AI model fetches historical BTC-USD data
-2. Processes and trains an LSTM model
-3. Makes price predictions
-4. Stores the final prediction on the Internet Computer blockchain
-5. Retrieves the stored prediction to verify
+The application is deployed on the Internet Computer mainnet with the following canisters:
+
+### Backend Canister
+- **Canister ID**: `uccih-hiaaa-aaaag-at43q-cai`
+- **Candid Interface**: [https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=uccih-hiaaa-aaaag-at43q-cai](https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=uccih-hiaaa-aaaag-at43q-cai)
+
+### Frontend Canister
+- **Canister ID**: `vpmmj-iaaaa-aaaag-at44a-cai`
+- **Frontend URL**: [https://vpmmj-iaaaa-aaaag-at44a-cai.icp0.io/](https://vpmmj-iaaaa-aaaag-at44a-cai.icp0.io/)
+
+### Updating the Canisters
+To update the deployed canisters with new predictions:
+```bash
+# Run the trading bot to generate new predictions
+python main.py --mode trade --interval 3600
+
+# The bot will automatically update the canister with new predictions
+```
+
+## Configuration
+
+Create a `config.json` file to customize:
+- Model architecture parameters
+- Training settings
+- Risk management thresholds
+- Trading execution rules
+
+Example:
+```json
+{
+    "symbols": ["BTC/USDT", "ETH/USDT"],
+    "sequence_length": 60,
+    "prediction_horizon": 24,
+    "max_position_size": 0.1,
+    "risk_aversion": 0.5
+}
+```
+
+## Monitoring
+
+1. Access MLflow UI:
+```bash
+mlflow ui
+```
+
+2. View experiments in W&B:
+```bash
+wandb login
+```
+
+## Performance Metrics
+
+The system tracks:
+- Prediction accuracy (RMSE, MAE)
+- Trading metrics (Sharpe ratio, max drawdown)
+- Portfolio performance
+- Risk metrics (VaR, CVaR)
 
 ## License
 
@@ -66,4 +169,4 @@ MIT
 
 ## Author
 
-Chetan Mittal 
+Chetan Mittal
