@@ -103,6 +103,27 @@ python main.py --mode optimize --trials 100
 python main.py --mode trade --interval 3600
 ```
 
+## Mainnet Deployment
+
+The application is deployed on the Internet Computer mainnet with the following canisters:
+
+### Backend Canister
+- **Canister ID**: `uccih-hiaaa-aaaag-at43q-cai`
+- **Candid Interface**: [https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=uccih-hiaaa-aaaag-at43q-cai](https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=uccih-hiaaa-aaaag-at43q-cai)
+
+### Frontend Canister
+- **Canister ID**: `vpmmj-iaaaa-aaaag-at44a-cai`
+- **Frontend URL**: [https://vpmmj-iaaaa-aaaag-at44a-cai.icp0.io/](https://vpmmj-iaaaa-aaaag-at44a-cai.icp0.io/)
+
+### Updating the Canisters
+To update the deployed canisters with new predictions:
+```bash
+# Run the trading bot to generate new predictions
+python main.py --mode trade --interval 3600
+
+# The bot will automatically update the canister with new predictions
+```
+
 ## Configuration
 
 Create a `config.json` file to customize:

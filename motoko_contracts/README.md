@@ -49,6 +49,30 @@ npm start
 
 Which will start a server at `http://localhost:8080`, proxying API requests to the replica at port 4943.
 
+## Mainnet Deployment
+
+This project has been deployed to the Internet Computer mainnet. You can access the deployed canisters at the following URLs:
+
+### Backend Canister
+- **Canister ID**: `uccih-hiaaa-aaaag-at43q-cai`
+- **Candid Interface**: [https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=uccih-hiaaa-aaaag-at43q-cai](https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=uccih-hiaaa-aaaag-at43q-cai)
+
+### Frontend Canister
+- **Canister ID**: `vpmmj-iaaaa-aaaag-at44a-cai`
+- **Frontend URL**: [https://vpmmj-iaaaa-aaaag-at44a-cai.icp0.io/](https://vpmmj-iaaaa-aaaag-at44a-cai.icp0.io/)
+
+### Updating the Deployed Canisters
+
+To update the deployed canisters with new code:
+
+```bash
+# Build and deploy updates to the backend
+dfx deploy --network ic motoko_contracts_backend
+
+# Build and deploy updates to the frontend
+dfx deploy --network ic motoko_contracts_frontend
+```
+
 ### Note on frontend environment variables
 
 If you are hosting frontend code somewhere without using DFX, you may need to make one of the following adjustments to ensure your project does not fetch the root key in production:
