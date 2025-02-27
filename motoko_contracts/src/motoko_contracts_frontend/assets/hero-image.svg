@@ -1,0 +1,214 @@
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2a2a72;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#4e54c8;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00b09b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#96c93d;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ff416c;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ff4b2b;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect x="0" y="0" width="800" height="600" fill="#f8f9fa" />
+  
+  <!-- Grid lines -->
+  <g stroke="#e0e0e0" stroke-width="1">
+    <line x1="0" y1="100" x2="800" y2="100" />
+    <line x1="0" y1="200" x2="800" y2="200" />
+    <line x1="0" y1="300" x2="800" y2="300" />
+    <line x1="0" y1="400" x2="800" y2="400" />
+    <line x1="0" y1="500" x2="800" y2="500" />
+    
+    <line x1="100" y1="0" x2="100" y2="600" />
+    <line x1="200" y1="0" x2="200" y2="600" />
+    <line x1="300" y1="0" x2="300" y2="600" />
+    <line x1="400" y1="0" x2="400" y2="600" />
+    <line x1="500" y1="0" x2="500" y2="600" />
+    <line x1="600" y1="0" x2="600" y2="600" />
+    <line x1="700" y1="0" x2="700" y2="600" />
+  </g>
+  
+  <!-- Main chart -->
+  <polyline 
+    fill="none" 
+    stroke="url(#grad1)" 
+    stroke-width="4"
+    points="
+      50,450
+      100,420
+      150,440
+      200,380
+      250,400
+      300,350
+      350,320
+      400,280
+      450,300
+      500,250
+      550,220
+      600,180
+      650,200
+      700,150
+      750,120
+    " 
+  />
+  
+  <!-- Secondary chart -->
+  <polyline 
+    fill="none" 
+    stroke="url(#grad2)" 
+    stroke-width="4"
+    points="
+      50,480
+      100,460
+      150,470
+      200,430
+      250,450
+      300,410
+      350,390
+      400,370
+      450,380
+      500,340
+      550,320
+      600,290
+      650,310
+      700,270
+      750,250
+    " 
+  />
+  
+  <!-- Tertiary chart -->
+  <polyline 
+    fill="none" 
+    stroke="url(#grad3)" 
+    stroke-width="4"
+    points="
+      50,500
+      100,490
+      150,495
+      200,470
+      250,480
+      300,450
+      350,440
+      400,420
+      450,430
+      500,400
+      550,380
+      600,360
+      650,370
+      700,340
+      750,320
+    " 
+  />
+  
+  <!-- Dots representing data points -->
+  <g fill="#2a2a72">
+    <circle cx="100" cy="420" r="6" />
+    <circle cx="200" cy="380" r="6" />
+    <circle cx="300" cy="350" r="6" />
+    <circle cx="400" cy="280" r="6" />
+    <circle cx="500" cy="250" r="6" />
+    <circle cx="600" cy="180" r="6" />
+    <circle cx="700" cy="150" r="6" />
+  </g>
+  
+  <!-- AI prediction visualization -->
+  <g>
+    <circle cx="750" cy="120" r="10" fill="#2a2a72" opacity="0.7" />
+    <circle cx="750" cy="120" r="20" fill="none" stroke="#2a2a72" stroke-width="2" stroke-dasharray="5,5" />
+    <circle cx="750" cy="120" r="30" fill="none" stroke="#2a2a72" stroke-width="1" stroke-dasharray="3,3" />
+  </g>
+  
+  <!-- Blockchain elements -->
+  <g>
+    <rect x="100" y="50" width="60" height="30" rx="5" fill="#2a2a72" opacity="0.8" />
+    <rect x="200" y="50" width="60" height="30" rx="5" fill="#2a2a72" opacity="0.8" />
+    <rect x="300" y="50" width="60" height="30" rx="5" fill="#2a2a72" opacity="0.8" />
+    <rect x="400" y="50" width="60" height="30" rx="5" fill="#2a2a72" opacity="0.8" />
+    <rect x="500" y="50" width="60" height="30" rx="5" fill="#2a2a72" opacity="0.8" />
+    <rect x="600" y="50" width="60" height="30" rx="5" fill="#2a2a72" opacity="0.8" />
+    
+    <line x1="160" y1="65" x2="200" y2="65" stroke="#2a2a72" stroke-width="2" />
+    <line x1="260" y1="65" x2="300" y2="65" stroke="#2a2a72" stroke-width="2" />
+    <line x1="360" y1="65" x2="400" y2="65" stroke="#2a2a72" stroke-width="2" />
+    <line x1="460" y1="65" x2="500" y2="65" stroke="#2a2a72" stroke-width="2" />
+    <line x1="560" y1="65" x2="600" y2="65" stroke="#2a2a72" stroke-width="2" />
+  </g>
+  
+  <!-- Neural network visualization -->
+  <g>
+    <circle cx="150" cy="530" r="8" fill="#2a2a72" opacity="0.7" />
+    <circle cx="150" cy="560" r="8" fill="#2a2a72" opacity="0.7" />
+    <circle cx="150" cy="590" r="8" fill="#2a2a72" opacity="0.7" />
+    
+    <circle cx="250" cy="515" r="8" fill="#2a2a72" opacity="0.7" />
+    <circle cx="250" cy="545" r="8" fill="#2a2a72" opacity="0.7" />
+    <circle cx="250" cy="575" r="8" fill="#2a2a72" opacity="0.7" />
+    <circle cx="250" cy="605" r="8" fill="#2a2a72" opacity="0.7" />
+    
+    <circle cx="350" cy="530" r="8" fill="#2a2a72" opacity="0.7" />
+    <circle cx="350" cy="560" r="8" fill="#2a2a72" opacity="0.7" />
+    <circle cx="350" cy="590" r="8" fill="#2a2a72" opacity="0.7" />
+    
+    <circle cx="450" cy="545" r="8" fill="#2a2a72" opacity="0.7" />
+    <circle cx="450" cy="575" r="8" fill="#2a2a72" opacity="0.7" />
+    
+    <!-- Connections -->
+    <g stroke="#2a2a72" stroke-width="1" opacity="0.3">
+      <!-- First to second layer -->
+      <line x1="150" y1="530" x2="250" y2="515" />
+      <line x1="150" y1="530" x2="250" y2="545" />
+      <line x1="150" y1="530" x2="250" y2="575" />
+      <line x1="150" y1="530" x2="250" y2="605" />
+      
+      <line x1="150" y1="560" x2="250" y2="515" />
+      <line x1="150" y1="560" x2="250" y2="545" />
+      <line x1="150" y1="560" x2="250" y2="575" />
+      <line x1="150" y1="560" x2="250" y2="605" />
+      
+      <line x1="150" y1="590" x2="250" y2="515" />
+      <line x1="150" y1="590" x2="250" y2="545" />
+      <line x1="150" y1="590" x2="250" y2="575" />
+      <line x1="150" y1="590" x2="250" y2="605" />
+      
+      <!-- Second to third layer -->
+      <line x1="250" y1="515" x2="350" y2="530" />
+      <line x1="250" y1="515" x2="350" y2="560" />
+      <line x1="250" y1="515" x2="350" y2="590" />
+      
+      <line x1="250" y1="545" x2="350" y2="530" />
+      <line x1="250" y1="545" x2="350" y2="560" />
+      <line x1="250" y1="545" x2="350" y2="590" />
+      
+      <line x1="250" y1="575" x2="350" y2="530" />
+      <line x1="250" y1="575" x2="350" y2="560" />
+      <line x1="250" y1="575" x2="350" y2="590" />
+      
+      <line x1="250" y1="605" x2="350" y2="530" />
+      <line x1="250" y1="605" x2="350" y2="560" />
+      <line x1="250" y1="605" x2="350" y2="590" />
+      
+      <!-- Third to output layer -->
+      <line x1="350" y1="530" x2="450" y2="545" />
+      <line x1="350" y1="530" x2="450" y2="575" />
+      
+      <line x1="350" y1="560" x2="450" y2="545" />
+      <line x1="350" y1="560" x2="450" y2="575" />
+      
+      <line x1="350" y1="590" x2="450" y2="545" />
+      <line x1="350" y1="590" x2="450" y2="575" />
+    </g>
+  </g>
+  
+  <!-- Decorative elements -->
+  <g opacity="0.15">
+    <circle cx="700" cy="500" r="40" fill="#2a2a72" />
+    <circle cx="650" cy="450" r="25" fill="#2a2a72" />
+    <circle cx="720" cy="430" r="15" fill="#2a2a72" />
+  </g>
+</svg>
