@@ -28,6 +28,12 @@ class TradingExecutor:
         self.portfolio_optimizer = ModernPortfolioOptimizer(config)
         self.current_positions: Dict[str, float] = {}
         self.trade_history: List[Dict] = []
+        # Use mainnet by default, can be overridden in config
+        self.use_mainnet = config.get('icp', {}).get('use_mainnet', True)
+        self.canister_id = config.get('icp', {}).get('canister_id', 'motoko_contracts_backend')
+        # If using mainnet and no specific canister ID is provided, use the known mainnet ID
+        if self.use_mainnet and self.canister_id == 'motoko_contracts_backend':
+            self.canister_id = 'uccih-hiaaa-aaaag-at43q-cai'
         
     async def execute_trading_cycle(self):
         """Execute one trading cycle"""
@@ -104,12 +110,14 @@ class TradingExecutor:
     async def _get_portfolio_from_icp(self) -> Dict[str, float]:
         """Get current portfolio state from ICP canister"""
         try:
+            # Build command with network parameter if using mainnet
+            cmd = ["dfx", "canister"]
+            if self.use_mainnet:
+                cmd.extend(["--network", "ic"])
+            cmd.extend(["call", self.canister_id, "getPortfolio"])
+            
             result = subprocess.run(
-                [
-                    "dfx", "canister", "call", 
-                    "motoko_contracts_backend", 
-                    "getPortfolio"
-                ],
+                cmd,
                 capture_output=True,
                 text=True,
                 check=True,
@@ -205,14 +213,16 @@ class TradingExecutor:
             # First set the predictions on the canister
             predictions = {t['symbol']: t['prediction'] for t in trades}
             
+            # Build command with network parameter if using mainnet
+            cmd = ["dfx", "canister"]
+            if self.use_mainnet:
+                cmd.extend(["--network", "ic"])
+            cmd.extend(["call", self.canister_id, "setPredictions", 
+                     f"({predictions.get('BTC/USDT', 0.0)}, {predictions.get('ETH/USDT', 0.0)})"])
+            
             # Run dfx from the motoko_contracts directory
             result = subprocess.run(
-                [
-                    "dfx", "canister", "call", 
-                    "motoko_contracts_backend", 
-                    "setPredictions", 
-                    f"({predictions.get('BTC/USDT', 0.0)}, {predictions.get('ETH/USDT', 0.0)})"
-                ],
+                cmd,
                 capture_output=True,
                 text=True,
                 check=True,
@@ -221,12 +231,13 @@ class TradingExecutor:
             logger.info("Set predictions on ICP canister")
 
             # Trigger rebalance
+            cmd = ["dfx", "canister"]
+            if self.use_mainnet:
+                cmd.extend(["--network", "ic"])
+            cmd.extend(["call", self.canister_id, "rebalance"])
+            
             result = subprocess.run(
-                [
-                    "dfx", "canister", "call", 
-                    "motoko_contracts_backend", 
-                    "rebalance"
-                ],
+                cmd,
                 capture_output=True,
                 text=True,
                 check=True,
@@ -236,13 +247,14 @@ class TradingExecutor:
             
             # Update metrics on the canister
             if hasattr(self, 'latest_metrics') and self.latest_metrics:
+                cmd = ["dfx", "canister"]
+                if self.use_mainnet:
+                    cmd.extend(["--network", "ic"])
+                cmd.extend(["call", self.canister_id, "updateMetrics", 
+                         f"({self.latest_metrics.sharpe_ratio}, {self.latest_metrics.volatility}, {self.latest_metrics.var_95}, {self.latest_metrics.max_drawdown})"])
+                
                 result = subprocess.run(
-                    [
-                        "dfx", "canister", "call", 
-                        "motoko_contracts_backend", 
-                        "updateMetrics", 
-                        f"({self.latest_metrics.sharpe_ratio}, {self.latest_metrics.volatility}, {self.latest_metrics.var_95}, {self.latest_metrics.max_drawdown})"
-                    ],
+                    cmd,
                     capture_output=True,
                     text=True,
                     check=True,
