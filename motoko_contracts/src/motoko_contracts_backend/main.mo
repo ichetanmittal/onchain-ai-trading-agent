@@ -29,6 +29,14 @@ actor {
     var latestBtcPrediction : Float = 0.0;
     var latestEthPrediction : Float = 0.0;
     var latestRebalanceResult : Text = "";
+    
+    // Store performance metrics
+    var metrics = {
+        sharpeRatio : Float = -3.33;
+        volatility : Float = 0.006;
+        var95 : Float = -0.0094;
+        maxDrawdown : Float = -0.244;
+    };
 
     // Get current portfolio state
     public query func getPortfolio() : async Portfolio {
@@ -49,6 +57,31 @@ actor {
     // Get latest rebalance result
     public query func getRebalanceResult() : async Text {
         return latestRebalanceResult;
+    };
+    
+    // Get performance metrics
+    public query func getMetrics() : async {
+        sharpeRatio : Float;
+        volatility : Float;
+        var95 : Float;
+        maxDrawdown : Float;
+    } {
+        return metrics;
+    };
+    
+    // Update metrics from AI model
+    public func updateMetrics(
+        sharpeRatio : Float,
+        volatility : Float,
+        var95 : Float,
+        maxDrawdown : Float
+    ) : async () {
+        metrics := {
+            sharpeRatio = sharpeRatio;
+            volatility = volatility;
+            var95 = var95;
+            maxDrawdown = maxDrawdown;
+        };
     };
 
     // Calculate optimal weights based on predictions and constraints
@@ -75,7 +108,7 @@ actor {
         
         // Calculate current weights
         let currentBtcWeight = portfolio.btc / totalValue;
-        let currentEthWeight = portfolio.eth / totalValue;
+        let _currentEthWeight = portfolio.eth / totalValue;
 
         // Get optimal weights
         let (targetBtcWeight, targetEthWeight) = calculateOptimalWeights();

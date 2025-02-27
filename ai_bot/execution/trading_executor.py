@@ -60,6 +60,14 @@ class TradingExecutor:
                 market_data=market_data
             )
             
+            # Store metrics for ICP canister update
+            self.latest_metrics = metrics
+            
+            # Validate risk metrics
+            if not self._validate_risk_metrics(metrics):
+                logger.warning("Risk validation failed, skipping trade execution")
+                return
+            
             # Generate trades to reach target allocation
             trades = self._generate_trades(current_portfolio, target_portfolio)
             
@@ -225,6 +233,22 @@ class TradingExecutor:
                 cwd="/Users/chetanmittal/Desktop/icp-ai-trading-bot/motoko_contracts"
             )
             logger.info(f"Rebalance result: {result.stdout}")
+            
+            # Update metrics on the canister
+            if hasattr(self, 'latest_metrics') and self.latest_metrics:
+                result = subprocess.run(
+                    [
+                        "dfx", "canister", "call", 
+                        "motoko_contracts_backend", 
+                        "updateMetrics", 
+                        f"({self.latest_metrics.sharpe_ratio}, {self.latest_metrics.volatility}, {self.latest_metrics.var_95}, {self.latest_metrics.max_drawdown})"
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    cwd="/Users/chetanmittal/Desktop/icp-ai-trading-bot/motoko_contracts"
+                )
+                logger.info("Updated metrics on ICP canister")
 
         except Exception as e:
             logger.error(f"Error executing trades on ICP: {str(e)}")
