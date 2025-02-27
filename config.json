@@ -50,5 +50,10 @@
         "enabled": false,
         "tracking_uri": "http://localhost:5000",
         "experiment_name": "crypto_trading_bot"
+    },
+    
+    "icp": {
+        "use_mainnet": true,
+        "canister_id": "uccih-hiaaa-aaaag-at43q-cai"
     }
 }
