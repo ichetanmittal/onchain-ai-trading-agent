@@ -47,7 +47,8 @@ class Dashboard {
         sharpeRatio: typeof metrics.sharpeRatio === 'number' ? metrics.sharpeRatio : Number(metrics.sharpeRatio),
         volatility: typeof metrics.volatility === 'number' ? metrics.volatility : Number(metrics.volatility),
         var95: typeof metrics.var95 === 'number' ? metrics.var95 : Number(metrics.var95),
-        maxDrawdown: typeof metrics.maxDrawdown === 'number' ? metrics.maxDrawdown : Number(metrics.maxDrawdown)
+        maxDrawdown: typeof metrics.maxDrawdown === 'number' ? metrics.maxDrawdown : Number(metrics.maxDrawdown),
+        updated: typeof metrics.updated === 'boolean' ? metrics.updated : Boolean(metrics.updated)
       };
       
       this.state = {
@@ -123,19 +124,19 @@ class Dashboard {
             <div class="metrics-grid">
               <div class="metric-card">
                 <h3>Sharpe Ratio</h3>
-                <p class="value">${metrics.sharpeRatio ? metrics.sharpeRatio.toFixed(2) : 'N/A'}</p>
+                <p class="value">${metrics.updated ? metrics.sharpeRatio.toFixed(2) : 'Not Available'}</p>
               </div>
               <div class="metric-card">
                 <h3>Volatility</h3>
-                <p class="value">${metrics.volatility ? (metrics.volatility * 100).toFixed(2) : 'N/A'}%</p>
+                <p class="value">${metrics.updated ? (metrics.volatility * 100).toFixed(2) + '%' : 'Not Available'}</p>
               </div>
               <div class="metric-card">
                 <h3>VaR (95%)</h3>
-                <p class="value">${metrics.var95 ? (metrics.var95 * 100).toFixed(2) : 'N/A'}%</p>
+                <p class="value">${metrics.updated ? (metrics.var95 * 100).toFixed(2) + '%' : 'Not Available'}</p>
               </div>
               <div class="metric-card">
                 <h3>Max Drawdown</h3>
-                <p class="value">${metrics.maxDrawdown ? (metrics.maxDrawdown * 100).toFixed(2) : 'N/A'}%</p>
+                <p class="value">${metrics.updated ? (metrics.maxDrawdown * 100).toFixed(2) + '%' : 'Not Available'}</p>
               </div>
             </div>
           ` : html`<p>Loading metrics data...</p>`}

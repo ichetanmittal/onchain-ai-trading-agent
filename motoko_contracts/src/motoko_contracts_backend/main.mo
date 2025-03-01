@@ -32,11 +32,14 @@ actor {
     
     // Store performance metrics
     var metrics = {
-        sharpeRatio : Float = -3.33;
-        volatility : Float = 0.006;
-        var95 : Float = -0.0094;
-        maxDrawdown : Float = -0.244;
+        sharpeRatio : Float = 0.0;
+        volatility : Float = 0.0;
+        var95 : Float = 0.0;
+        maxDrawdown : Float = 0.0;
     };
+    
+    // Flag to track if metrics have been updated by the AI model
+    var metricsUpdated : Bool = false;
 
     // Get current portfolio state
     public query func getPortfolio() : async Portfolio {
@@ -65,8 +68,15 @@ actor {
         volatility : Float;
         var95 : Float;
         maxDrawdown : Float;
+        updated : Bool;
     } {
-        return metrics;
+        return {
+            sharpeRatio = metrics.sharpeRatio;
+            volatility = metrics.volatility;
+            var95 = metrics.var95;
+            maxDrawdown = metrics.maxDrawdown;
+            updated = metricsUpdated;
+        };
     };
     
     // Update metrics from AI model
@@ -82,6 +92,7 @@ actor {
             var95 = var95;
             maxDrawdown = maxDrawdown;
         };
+        metricsUpdated := true;
     };
 
     // Calculate optimal weights based on predictions and constraints
