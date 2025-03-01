@@ -10,11 +10,87 @@ class Dashboard {
       ethPrediction: null,
       portfolio: null,
       rebalanceResult: null,
-      metrics: null
+      metrics: null,
+      randomnessEnabled: false,
+      monteCarloSimulationDays: 30
     };
     this.fetchData();
   }
 
+  toggleRandomness = () => {
+    this.setState({ randomnessEnabled: !this.state.randomnessEnabled });
+  };
+  
+  setState = (newState) => {
+    this.state = { ...this.state, ...newState };
+    this.render();
+  };
+  
+  updateMonteCarloSimulationDays = (event) => {
+    const days = parseInt(event.target.value, 10);
+    if (!isNaN(days) && days > 0 && days <= 365) {
+      this.setState({ monteCarloSimulationDays: days });
+    }
+  };
+  
+  getRandomness = async () => {
+    try {
+      const random = await motoko_contracts_backend.getRandomness();
+      console.log("Received randomness:", random);
+      alert("Randomness received from Internet Computer!");
+    } catch (error) {
+      console.error('Error getting randomness:', error);
+      alert("Error getting randomness: " + error.message);
+    }
+  };
+  
+  runMonteCarloSimulation = async () => {
+    try {
+      const days = this.state.monteCarloSimulationDays;
+      console.log(`Running Monte Carlo simulation for ${days} days...`);
+      
+      const simulationResults = await motoko_contracts_backend.runMonteCarloSimulation(days);
+      console.log("Simulation results:", simulationResults);
+      
+      alert(`Monte Carlo simulation completed for ${days} days!\n\nResults:\n` +
+            `Simulated Sharpe Ratio: ${simulationResults.simulatedSharpeRatio.toFixed(2)}\n` +
+            `Simulated Volatility: ${(simulationResults.simulatedVolatility * 100).toFixed(2)}%\n` +
+            `Simulated VaR (95%): ${(simulationResults.simulatedVar95 * 100).toFixed(2)}%\n` +
+            `Simulated Max Drawdown: ${(simulationResults.simulatedMaxDrawdown * 100).toFixed(2)}%`);
+      
+      this.fetchData(); // Refresh data to show updated metrics
+    } catch (error) {
+      console.error('Error running Monte Carlo simulation:', error);
+      alert("Error running Monte Carlo simulation: " + error.message);
+    }
+  };
+  
+  rebalanceWithRandomness = async () => {
+    try {
+      console.log("Rebalancing portfolio with randomness...");
+      const result = await motoko_contracts_backend.rebalanceWithRandomness();
+      console.log("Rebalance with randomness result:", result);
+      alert("Portfolio rebalanced with randomness!\n\n" + result);
+      this.fetchData(); // Refresh data to show updated portfolio
+    } catch (error) {
+      console.error('Error rebalancing with randomness:', error);
+      alert("Error rebalancing with randomness: " + error.message);
+    }
+  };
+  
+  rebalanceStandard = async () => {
+    try {
+      console.log("Rebalancing portfolio (standard)...");
+      const result = await motoko_contracts_backend.rebalance();
+      console.log("Standard rebalance result:", result);
+      alert("Portfolio rebalanced!\n\n" + result);
+      this.fetchData(); // Refresh data to show updated portfolio
+    } catch (error) {
+      console.error('Error rebalancing:', error);
+      alert("Error rebalancing: " + error.message);
+    }
+  };
+  
   fetchData = async () => {
     try {
       // Fetch predictions and portfolio data from backend
@@ -48,7 +124,8 @@ class Dashboard {
         volatility: typeof metrics.volatility === 'number' ? metrics.volatility : Number(metrics.volatility),
         var95: typeof metrics.var95 === 'number' ? metrics.var95 : Number(metrics.var95),
         maxDrawdown: typeof metrics.maxDrawdown === 'number' ? metrics.maxDrawdown : Number(metrics.maxDrawdown),
-        updated: typeof metrics.updated === 'boolean' ? metrics.updated : Boolean(metrics.updated)
+        updated: typeof metrics.updated === 'boolean' ? metrics.updated : Boolean(metrics.updated),
+        monteCarloSimulated: typeof metrics.monteCarloSimulated === 'boolean' ? metrics.monteCarloSimulated : Boolean(metrics.monteCarloSimulated)
       };
       
       this.state = {
@@ -66,7 +143,7 @@ class Dashboard {
   };
 
   render() {
-    const { btcPrediction, ethPrediction, portfolio, rebalanceResult, metrics } = this.state;
+    const { btcPrediction, ethPrediction, portfolio, rebalanceResult, metrics, randomnessEnabled, monteCarloSimulationDays } = this.state;
     
     const dashboardTemplate = html`
       <main class="container">
@@ -119,7 +196,7 @@ class Dashboard {
         </section>
 
         <section class="metrics-section">
-          <h2>Performance Metrics</h2>
+          <h2>Performance Metrics ${metrics && metrics.monteCarloSimulated ? html`<span class="monte-carlo-badge">Monte Carlo Simulated</span>` : ''}</h2>
           ${metrics ? html`
             <div class="metrics-grid">
               <div class="metric-card">
@@ -141,10 +218,51 @@ class Dashboard {
             </div>
           ` : html`<p>Loading metrics data...</p>`}
         </section>
+        
+        <section class="randomness-section">
+          <h2>Randomness Features</h2>
+          <div class="randomness-controls">
+            <div class="toggle-container">
+              <label class="toggle-label">
+                <span>Enable Randomness</span>
+                <input type="checkbox" 
+                       ?checked=${randomnessEnabled} 
+                       @change=${this.toggleRandomness} />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            
+            <button class="randomness-btn" @click=${this.getRandomness}>
+              Get IC Randomness
+            </button>
+            
+            <div class="monte-carlo-controls">
+              <label for="simulation-days">Monte Carlo Simulation Days:</label>
+              <input type="number" 
+                     id="simulation-days" 
+                     min="1" 
+                     max="365" 
+                     value=${monteCarloSimulationDays} 
+                     @change=${this.updateMonteCarloSimulationDays} />
+              <button class="monte-carlo-btn" @click=${this.runMonteCarloSimulation}>
+                Run Monte Carlo Simulation
+              </button>
+            </div>
+            
+            <div class="rebalance-controls">
+              <button class="rebalance-btn ${randomnessEnabled ? 'random' : 'standard'}" 
+                      @click=${randomnessEnabled ? this.rebalanceWithRandomness : this.rebalanceStandard}>
+                ${randomnessEnabled ? 'Rebalance with Randomness' : 'Standard Rebalance'}
+              </button>
+            </div>
+          </div>
+        </section>
 
-        <button class="refresh-btn" @click=${this.fetchData}>
-          Refresh Data
-        </button>
+        <div class="action-buttons">
+          <button class="refresh-btn" @click=${this.fetchData}>
+            Refresh Data
+          </button>
+        </div>
       </main>
     `;
     
