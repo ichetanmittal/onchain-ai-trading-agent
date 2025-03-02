@@ -24,10 +24,13 @@ A state-of-the-art AI-powered trading bot that leverages transformer models, mul
 │   │   └── portfolio_optimizer.py   # Modern portfolio optimization
 │   ├── execution/
 │   │   └── trading_executor.py      # Trading execution system
+│   ├── monitoring/
+│   │   └── metrics_tracker.py       # Performance and risk metrics
 │   └── controller.py                # Main orchestrator
 ├── motoko_contracts/                # Internet Computer smart contracts
 │   └── src/
-│       └── motoko_contracts_backend/
+│       ├── motoko_contracts_backend/
+│       └── motoko_contracts_frontend/ # Modern React-based UI
 └── main.py                         # Entry point
 ```
 
@@ -54,14 +57,23 @@ A state-of-the-art AI-powered trading bot that leverages transformer models, mul
 ### Portfolio Management
 - Modern portfolio theory implementation
 - Risk-adjusted optimization
-- Advanced risk metrics (VaR, CVaR)
+- Advanced risk metrics (VaR, CVaR, Sharpe ratio)
 - Dynamic rebalancing
+- **NEW**: Randomness-based portfolio diversification
 
 ### Trading Execution
 - ICP blockchain integration
 - Real-time trade execution
 - Performance monitoring
 - Risk management checks
+- Automated portfolio rebalancing
+
+### Modern UI
+- Responsive design for all devices
+- Real-time portfolio visualization
+- Interactive trading metrics dashboard
+- Randomness controls for portfolio diversification
+- Monte Carlo simulation visualization
 
 ## Requirements
 
@@ -101,6 +113,9 @@ python main.py --mode optimize --trials 100
 
 # Trading mode
 python main.py --mode trade --interval 3600
+
+# Continuous trading mode (default)
+python main.py
 ```
 
 ## Mainnet Deployment
@@ -131,6 +146,7 @@ Create a `config.json` file to customize:
 - Training settings
 - Risk management thresholds
 - Trading execution rules
+- Randomness parameters
 
 Example:
 ```json
@@ -139,7 +155,16 @@ Example:
     "sequence_length": 60,
     "prediction_horizon": 24,
     "max_position_size": 0.1,
-    "risk_aversion": 0.5
+    "risk_aversion": 0.5,
+    "randomness": {
+        "enabled": false,
+        "factor": 0.2,
+        "monte_carlo": {
+            "enabled": false,
+            "simulations": 1000,
+            "confidence_level": 0.95
+        }
+    }
 }
 ```
 
@@ -155,13 +180,42 @@ mlflow ui
 wandb login
 ```
 
+3. View real-time metrics on the frontend dashboard:
+   - Portfolio allocation
+   - Prediction accuracy
+   - Risk metrics (Sharpe ratio, VaR, Max Drawdown)
+   - Performance history
+
 ## Performance Metrics
 
 The system tracks:
 - Prediction accuracy (RMSE, MAE)
 - Trading metrics (Sharpe ratio, max drawdown)
 - Portfolio performance
-- Risk metrics (VaR, CVaR)
+- Risk metrics (VaR, CVaR, Volatility)
+- Monte Carlo simulation results (when enabled)
+
+## New Features
+
+### Randomness Implementation
+The system now supports adding controlled randomness to portfolio allocations, which can help:
+- Reduce overfitting to historical patterns
+- Explore alternative allocation strategies
+- Increase portfolio diversification
+- Mitigate model uncertainty
+
+### Monte Carlo Simulation
+- Simulates thousands of potential market scenarios
+- Calculates confidence intervals for returns
+- Estimates Value at Risk (VaR) with higher accuracy
+- Provides more robust risk assessment
+
+### Modern UI
+- Completely redesigned frontend with modern aesthetics
+- Responsive design for mobile, tablet, and desktop
+- Interactive charts and visualizations
+- Real-time updates from the blockchain
+- User-friendly controls for randomness parameters
 
 ## License
 
