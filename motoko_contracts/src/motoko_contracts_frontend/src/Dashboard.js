@@ -12,9 +12,11 @@ class Dashboard {
       rebalanceResult: null,
       metrics: null,
       randomnessEnabled: false,
-      monteCarloSimulationDays: 30
+      monteCarloSimulationDays: 30,
+      botStatus: 'unknown'
     };
     this.fetchData();
+    this.checkBotStatus();
   }
 
   toggleRandomness = () => {
@@ -90,6 +92,78 @@ class Dashboard {
       alert("Error rebalancing: " + error.message);
     }
   };
+
+  startTradingBot = async () => {
+    try {
+      console.log("Starting trading bot...");
+      this.setState({ botStatus: 'starting' });
+      
+      // Make API call to start the trading bot
+      const response = await fetch('http://localhost:8080/api/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ mode: 'trade', interval: 3600 }),
+      });
+      
+      const result = await response.json();
+      console.log("Trading bot start result:", result);
+      
+      if (result.status === 'started') {
+        this.setState({ botStatus: 'running' });
+        alert("Trading bot started successfully!");
+      } else {
+        this.setState({ botStatus: 'error' });
+        alert("Error starting trading bot!");
+      }
+    } catch (error) {
+      console.error('Error starting trading bot:', error);
+      this.setState({ botStatus: 'error' });
+      alert("Error starting trading bot: " + error.message);
+    }
+  };
+  
+  stopTradingBot = async () => {
+    try {
+      console.log("Stopping trading bot...");
+      this.setState({ botStatus: 'stopping' });
+      
+      // Make API call to stop the trading bot
+      const response = await fetch('http://localhost:8080/api/stop', {
+        method: 'POST',
+      });
+      
+      const result = await response.json();
+      console.log("Trading bot stop result:", result);
+      
+      if (result.status === 'stopped' || result.status === 'already_stopped') {
+        this.setState({ botStatus: 'stopped' });
+        alert("Trading bot stopped successfully!");
+      } else {
+        this.setState({ botStatus: 'error' });
+        alert("Error stopping trading bot!");
+      }
+    } catch (error) {
+      console.error('Error stopping trading bot:', error);
+      this.setState({ botStatus: 'error' });
+      alert("Error stopping trading bot: " + error.message);
+    }
+  };
+  
+  checkBotStatus = async () => {
+    try {
+      // Make API call to check the trading bot status
+      const response = await fetch('http://localhost:8080/api/status');
+      const result = await response.json();
+      console.log("Trading bot status:", result);
+      
+      this.setState({ botStatus: result.status });
+    } catch (error) {
+      console.error('Error checking trading bot status:', error);
+      this.setState({ botStatus: 'unknown' });
+    }
+  };
   
   fetchData = async () => {
     try {
@@ -128,28 +202,37 @@ class Dashboard {
         monteCarloSimulated: typeof metrics.monteCarloSimulated === 'boolean' ? metrics.monteCarloSimulated : Boolean(metrics.monteCarloSimulated)
       };
       
-      this.state = {
+      this.setState({
         btcPrediction,
         ethPrediction,
         portfolio: processedPortfolio,
         rebalanceResult,
         metrics: processedMetrics
-      };
+      });
       console.log("Updated state:", this.state);
-      this.render();
     } catch (error) {
       console.error('Error fetching data:', error);
     }
   };
 
   render() {
-    const { btcPrediction, ethPrediction, portfolio, rebalanceResult, metrics, randomnessEnabled, monteCarloSimulationDays } = this.state;
+    const { btcPrediction, ethPrediction, portfolio, rebalanceResult, metrics, randomnessEnabled, monteCarloSimulationDays, botStatus } = this.state;
     
     const dashboardTemplate = html`
       <main class="container">
         <header class="dashboard-header">
           <h1>AI Trading Bot Dashboard</h1>
-          <button class="logout-btn" @click=${this.onLogout}>Logout</button>
+          <div class="header-buttons">
+            <button class="trading-bot-btn ${botStatus === 'running' ? 'running' : botStatus === 'stopped' ? 'stopped' : 'unknown'}" 
+                    @click=${botStatus === 'running' ? this.stopTradingBot : this.startTradingBot}
+                    ?disabled=${botStatus === 'starting' || botStatus === 'stopping'}>
+              ${botStatus === 'running' ? 'Stop Trading Bot' : 
+                botStatus === 'stopped' ? 'Start Trading Bot' : 
+                botStatus === 'starting' ? 'Starting...' :
+                botStatus === 'stopping' ? 'Stopping...' : 'Start Trading Bot'}
+            </button>
+            <button class="logout-btn" @click=${this.onLogout}>Logout</button>
+          </div>
         </header>
         
         <section class="predictions-section">
