@@ -176,6 +176,12 @@ section {
   margin-bottom: 2rem;
 }
 
+.header-buttons {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
 .logout-btn {
   background-color: var(--primary-color);
   color: white;
@@ -193,7 +199,53 @@ section {
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
 }
 
-/* Randomness Section Styles */
+.trading-bot-btn {
+  padding: 0.5rem 1.5rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition);
+  font-weight: 600;
+  border: none;
+  color: white;
+}
+
+.trading-bot-btn.running {
+  background-color: var(--danger-color);
+}
+
+.trading-bot-btn.running:hover {
+  background-color: #e11d48;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+}
+
+.trading-bot-btn.stopped {
+  background-color: var(--success-color);
+}
+
+.trading-bot-btn.stopped:hover {
+  background-color: #059669;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+
+.trading-bot-btn.unknown {
+  background-color: var(--warning-color);
+}
+
+.trading-bot-btn.unknown:hover {
+  background-color: #d97706;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);
+}
+
+.trading-bot-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 .randomness-section {
   background-color: var(--card-background);
   border-radius: var(--radius-lg);
