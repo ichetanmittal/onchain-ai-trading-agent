@@ -1,6 +1,7 @@
 import { html, render } from 'lit-html';
 import { motoko_contracts_backend } from 'declarations/motoko_contracts_backend';
 import './App.css';
+import ProcessModal from './components/ProcessModal';
 
 class Dashboard {
   constructor(onLogout) {
@@ -13,7 +14,19 @@ class Dashboard {
       metrics: null,
       randomnessEnabled: false,
       monteCarloSimulationDays: 30,
-      botStatus: 'unknown'
+      botStatus: 'unknown',
+      showProcessModal: false,
+      processUpdates: [],
+      processSteps: {
+        initializing: false,
+        loading_model: false,
+        collecting_data: false,
+        generating_predictions: false,
+        retrieving_portfolio: false,
+        executing_trades: false,
+        completed: false
+      },
+      updateInterval: null
     };
     this.fetchData();
     this.checkBotStatus();
@@ -96,7 +109,27 @@ class Dashboard {
   startTradingBot = async () => {
     try {
       console.log("Starting trading bot...");
-      this.setState({ botStatus: 'starting' });
+      this.setState({ 
+        botStatus: 'starting',
+        showProcessModal: true,
+        processUpdates: [],
+        processSteps: {
+          initializing: false,
+          loading_model: false,
+          collecting_data: false,
+          generating_predictions: false,
+          retrieving_portfolio: false,
+          executing_trades: false,
+          completed: false
+        }
+      });
+      
+      // Start polling for process updates
+      const updateInterval = setInterval(() => {
+        this.fetchProcessUpdates();
+      }, 1000); // Check every second
+      
+      this.setState({ updateInterval });
       
       // Make API call to start the trading bot
       const response = await fetch('http://localhost:8080/api/start', {
@@ -112,18 +145,20 @@ class Dashboard {
       
       if (result.status === 'started') {
         this.setState({ botStatus: 'running' });
-        alert("Trading bot started successfully!");
+        // Don't show alert, the modal will show progress
       } else {
         this.setState({ botStatus: 'error' });
         alert("Error starting trading bot!");
+        this.closeProcessModal();
       }
     } catch (error) {
       console.error('Error starting trading bot:', error);
       this.setState({ botStatus: 'error' });
       alert("Error starting trading bot: " + error.message);
+      this.closeProcessModal();
     }
   };
-  
+
   stopTradingBot = async () => {
     try {
       console.log("Stopping trading bot...");
@@ -215,8 +250,39 @@ class Dashboard {
     }
   };
 
+  fetchProcessUpdates = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/api/process-updates');
+      const data = await response.json();
+      
+      this.setState({
+        processUpdates: data.updates,
+        processSteps: data.steps
+      });
+      
+      // If process is completed, stop polling
+      if (data.steps.completed) {
+        this.clearProcessUpdatesInterval();
+      }
+    } catch (error) {
+      console.error('Error fetching process updates:', error);
+    }
+  }
+
+  clearProcessUpdatesInterval() {
+    if (this.state.updateInterval) {
+      clearInterval(this.state.updateInterval);
+      this.setState({ updateInterval: null });
+    }
+  }
+
+  closeProcessModal = () => {
+    this.setState({ showProcessModal: false });
+    this.clearProcessUpdatesInterval();
+  };
+
   render() {
-    const { btcPrediction, ethPrediction, portfolio, rebalanceResult, metrics, randomnessEnabled, monteCarloSimulationDays, botStatus } = this.state;
+    const { btcPrediction, ethPrediction, portfolio, rebalanceResult, metrics, randomnessEnabled, monteCarloSimulationDays, botStatus, showProcessModal, processUpdates, processSteps } = this.state;
     
     const dashboardTemplate = html`
       <main class="container">
@@ -346,6 +412,15 @@ class Dashboard {
             Refresh Data
           </button>
         </div>
+        
+        ${showProcessModal ? html`
+          <ProcessModal 
+            show=${showProcessModal} 
+            onClose=${this.closeProcessModal}
+            updates=${processUpdates}
+            steps=${processSteps}
+          />
+        ` : ''}
       </main>
     `;
     
