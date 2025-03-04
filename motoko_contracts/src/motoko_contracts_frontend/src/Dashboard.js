@@ -18,7 +18,11 @@ class Dashboard {
       monteCarloSimulationDays: 30
     };
     console.log("[Dashboard] Initializing state:", this.state);
-    this.fetchData();
+    
+    // Only fetch data if already authenticated
+    if (authService.getIsAuthenticated()) {
+      this.fetchData();
+    }
   }
 
   toggleRandomness = () => {
@@ -44,6 +48,9 @@ class Dashboard {
     console.log("[Dashboard] Getting randomness");
     try {
       const actor = authService.getActor();
+      if (!actor) {
+        throw new Error("Not authenticated");
+      }
       const random = await actor.getRandomness();
       console.log("[Dashboard] Received randomness:", random);
       alert("Randomness received from Internet Computer!");
@@ -60,6 +67,9 @@ class Dashboard {
       console.log("[Dashboard] Running simulation for", days, "days");
       
       const actor = authService.getActor();
+      if (!actor) {
+        throw new Error("Not authenticated");
+      }
       const simulationResults = await actor.runMonteCarloSimulation(days);
       console.log("[Dashboard] Simulation results:", simulationResults);
       
@@ -81,6 +91,9 @@ class Dashboard {
     try {
       console.log("[Dashboard] Rebalancing portfolio with randomness...");
       const actor = authService.getActor();
+      if (!actor) {
+        throw new Error("Not authenticated");
+      }
       const result = await actor.rebalanceWithRandomness();
       console.log("[Dashboard] Rebalance with randomness result:", result);
       alert("Portfolio rebalanced with randomness!\n\n" + result);
@@ -96,6 +109,9 @@ class Dashboard {
     try {
       console.log("[Dashboard] Rebalancing portfolio (standard)...");
       const actor = authService.getActor();
+      if (!actor) {
+        throw new Error("Not authenticated");
+      }
       const result = await actor.rebalance();
       console.log("[Dashboard] Standard rebalance result:", result);
       alert("Portfolio rebalanced!\n\n" + result);
@@ -112,6 +128,11 @@ class Dashboard {
       // Fetch predictions and portfolio data from backend
       console.log("[Dashboard] Fetching data from backend...");
       const actor = authService.getActor();
+      
+      if (!actor) {
+        console.log("[Dashboard] Not authenticated yet, skipping data fetch");
+        return;
+      }
       
       const predictions = await actor.getPredictions();
       console.log("[Dashboard] Predictions:", predictions);
@@ -146,15 +167,13 @@ class Dashboard {
         monteCarloSimulated: typeof metrics.monteCarloSimulated === 'boolean' ? metrics.monteCarloSimulated : Boolean(metrics.monteCarloSimulated)
       };
       
-      this.state = {
+      this.setState({
         btcPrediction,
         ethPrediction,
         portfolio: processedPortfolio,
         rebalanceResult,
         metrics: processedMetrics
-      };
-      console.log("[Dashboard] Updated state:", this.state);
-      this.render();
+      });
     } catch (error) {
       console.error("[Dashboard] Error fetching data:", error);
     }
@@ -276,6 +295,12 @@ class Dashboard {
         </section>
       </main>
     `;
+    
+    // Render the template to the DOM
+    const rootElement = document.getElementById('root');
+    if (rootElement) {
+      render(dashboardTemplate, rootElement);
+    }
     
     return dashboardTemplate;
   }

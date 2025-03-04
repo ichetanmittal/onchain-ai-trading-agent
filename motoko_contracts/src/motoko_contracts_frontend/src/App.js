@@ -14,7 +14,8 @@ class App {
     };
     
     this.landingPage = new LandingPage(this.handleLogin);
-    this.dashboard = new Dashboard(this.handleLogout);
+    // We'll create the dashboard only when needed
+    this.dashboard = null;
     
     // Initialize auth service
     this.initAuth();
@@ -32,6 +33,13 @@ class App {
           isInitializing: false,
           principal: principal.toString()
         };
+        // Initialize dashboard after authentication is confirmed
+        if (!this.dashboard) {
+          this.dashboard = new Dashboard(this.handleLogout);
+          this.dashboard.principal = principal.toString();
+          // Fetch data now that we're authenticated
+          this.dashboard.fetchData();
+        }
       } else {
         this.state = {
           isAuthenticated: false,
@@ -64,6 +72,15 @@ class App {
       isAuthenticated,
       principal
     };
+    
+    // Initialize dashboard when user becomes authenticated
+    if (isAuthenticated && !this.dashboard) {
+      this.dashboard = new Dashboard(this.handleLogout);
+      this.dashboard.principal = principal;
+      // Fetch data now that we're authenticated
+      this.dashboard.fetchData();
+    }
+    
     console.log("[App] Rendering after auth state change with state:", this.state);
     this.render();
   };
@@ -81,6 +98,8 @@ class App {
     console.log("[App] Logging out...");
     try {
       await authService.logout();
+      // Clear dashboard on logout
+      this.dashboard = null;
     } catch (error) {
       console.error("[App] Logout error:", error);
     }
@@ -101,8 +120,17 @@ class App {
       `;
     } else if (isAuthenticated) {
       console.log("[App] Rendering dashboard template");
-      this.dashboard.principal = principal;
-      content = this.dashboard.render();
+      // Create dashboard if it doesn't exist yet
+      if (!this.dashboard) {
+        this.dashboard = new Dashboard(this.handleLogout);
+        this.dashboard.principal = principal;
+        // Fetch data now that we're authenticated
+        this.dashboard.fetchData();
+      } else {
+        this.dashboard.principal = principal;
+      }
+      // Let the Dashboard handle its own rendering
+      return;
     } else {
       console.log("[App] Rendering landing page template");
       content = this.landingPage.render();

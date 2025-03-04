@@ -15,9 +15,9 @@ export const II_URL = DFX_NETWORK === 'ic'
   ? 'https://identity.ic0.app' 
   : `http://127.0.0.1:4943/?canisterId=${INTERNET_IDENTITY_CANISTER_ID}`;
 
-// Host URL
+// Host URL - Using icp0.io instead of ic0.app for mainnet
 export const HOST = DFX_NETWORK === 'ic' 
-  ? 'https://ic0.app' 
+  ? 'https://icp0.io' 
   : 'http://127.0.0.1:4943';
 
 console.log("[Config] Environment configuration:", {
