@@ -1,10 +1,13 @@
 import { html, render } from 'lit-html';
 import { motoko_contracts_backend } from 'declarations/motoko_contracts_backend';
+import authService from './auth';
 import './App.css';
 
 class Dashboard {
   constructor(onLogout) {
+    console.log("[Dashboard] Initializing Dashboard component");
     this.onLogout = onLogout;
+    this.principal = null;
     this.state = {
       btcPrediction: null,
       ethPrediction: null,
@@ -14,19 +17,27 @@ class Dashboard {
       randomnessEnabled: false,
       monteCarloSimulationDays: 30
     };
-    this.fetchData();
+    console.log("[Dashboard] Initializing state:", this.state);
+    
+    // Only fetch data if already authenticated
+    if (authService.getIsAuthenticated()) {
+      this.fetchData();
+    }
   }
 
   toggleRandomness = () => {
+    console.log("[Dashboard] Toggling randomness");
     this.setState({ randomnessEnabled: !this.state.randomnessEnabled });
   };
   
   setState = (newState) => {
+    console.log("[Dashboard] Updating state:", newState);
     this.state = { ...this.state, ...newState };
     this.render();
   };
   
   updateMonteCarloSimulationDays = (event) => {
+    console.log("[Dashboard] Updating Monte Carlo simulation days:", event.target.value);
     const days = parseInt(event.target.value, 10);
     if (!isNaN(days) && days > 0 && days <= 365) {
       this.setState({ monteCarloSimulationDays: days });
@@ -34,23 +45,33 @@ class Dashboard {
   };
   
   getRandomness = async () => {
+    console.log("[Dashboard] Getting randomness");
     try {
-      const random = await motoko_contracts_backend.getRandomness();
-      console.log("Received randomness:", random);
+      const actor = authService.getActor();
+      if (!actor) {
+        throw new Error("Not authenticated");
+      }
+      const random = await actor.getRandomness();
+      console.log("[Dashboard] Received randomness:", random);
       alert("Randomness received from Internet Computer!");
     } catch (error) {
-      console.error('Error getting randomness:', error);
+      console.error("[Dashboard] Error getting randomness:", error);
       alert("Error getting randomness: " + error.message);
     }
   };
   
   runMonteCarloSimulation = async () => {
+    console.log("[Dashboard] Running Monte Carlo simulation");
     try {
       const days = this.state.monteCarloSimulationDays;
-      console.log(`Running Monte Carlo simulation for ${days} days...`);
+      console.log("[Dashboard] Running simulation for", days, "days");
       
-      const simulationResults = await motoko_contracts_backend.runMonteCarloSimulation(days);
-      console.log("Simulation results:", simulationResults);
+      const actor = authService.getActor();
+      if (!actor) {
+        throw new Error("Not authenticated");
+      }
+      const simulationResults = await actor.runMonteCarloSimulation(days);
+      console.log("[Dashboard] Simulation results:", simulationResults);
       
       alert(`Monte Carlo simulation completed for ${days} days!\n\nResults:\n` +
             `Simulated Sharpe Ratio: ${simulationResults.simulatedSharpeRatio.toFixed(2)}\n` +
@@ -60,52 +81,70 @@ class Dashboard {
       
       this.fetchData(); // Refresh data to show updated metrics
     } catch (error) {
-      console.error('Error running Monte Carlo simulation:', error);
+      console.error("[Dashboard] Error running Monte Carlo simulation:", error);
       alert("Error running Monte Carlo simulation: " + error.message);
     }
   };
   
   rebalanceWithRandomness = async () => {
+    console.log("[Dashboard] Rebalancing with randomness");
     try {
-      console.log("Rebalancing portfolio with randomness...");
-      const result = await motoko_contracts_backend.rebalanceWithRandomness();
-      console.log("Rebalance with randomness result:", result);
+      console.log("[Dashboard] Rebalancing portfolio with randomness...");
+      const actor = authService.getActor();
+      if (!actor) {
+        throw new Error("Not authenticated");
+      }
+      const result = await actor.rebalanceWithRandomness();
+      console.log("[Dashboard] Rebalance with randomness result:", result);
       alert("Portfolio rebalanced with randomness!\n\n" + result);
       this.fetchData(); // Refresh data to show updated portfolio
     } catch (error) {
-      console.error('Error rebalancing with randomness:', error);
+      console.error("[Dashboard] Error rebalancing with randomness:", error);
       alert("Error rebalancing with randomness: " + error.message);
     }
   };
   
   rebalanceStandard = async () => {
+    console.log("[Dashboard] Rebalancing standard");
     try {
-      console.log("Rebalancing portfolio (standard)...");
-      const result = await motoko_contracts_backend.rebalance();
-      console.log("Standard rebalance result:", result);
+      console.log("[Dashboard] Rebalancing portfolio (standard)...");
+      const actor = authService.getActor();
+      if (!actor) {
+        throw new Error("Not authenticated");
+      }
+      const result = await actor.rebalance();
+      console.log("[Dashboard] Standard rebalance result:", result);
       alert("Portfolio rebalanced!\n\n" + result);
       this.fetchData(); // Refresh data to show updated portfolio
     } catch (error) {
-      console.error('Error rebalancing:', error);
+      console.error("[Dashboard] Error rebalancing:", error);
       alert("Error rebalancing: " + error.message);
     }
   };
   
   fetchData = async () => {
+    console.log("[Dashboard] Fetching data");
     try {
       // Fetch predictions and portfolio data from backend
-      console.log("Fetching data from backend...");
-      const predictions = await motoko_contracts_backend.getPredictions();
-      console.log("Predictions:", predictions);
+      console.log("[Dashboard] Fetching data from backend...");
+      const actor = authService.getActor();
       
-      const portfolio = await motoko_contracts_backend.getPortfolio();
-      console.log("Portfolio:", portfolio);
+      if (!actor) {
+        console.log("[Dashboard] Not authenticated yet, skipping data fetch");
+        return;
+      }
       
-      const rebalanceResult = await motoko_contracts_backend.getRebalanceResult();
-      console.log("Rebalance result:", rebalanceResult);
+      const predictions = await actor.getPredictions();
+      console.log("[Dashboard] Predictions:", predictions);
       
-      const metrics = await motoko_contracts_backend.getMetrics();
-      console.log("Metrics:", metrics);
+      const portfolio = await actor.getPortfolio();
+      console.log("[Dashboard] Portfolio:", portfolio);
+      
+      const rebalanceResult = await actor.getRebalanceResult();
+      console.log("[Dashboard] Rebalance result:", rebalanceResult);
+      
+      const metrics = await actor.getMetrics();
+      console.log("[Dashboard] Metrics:", metrics);
       
       // Convert values to JavaScript numbers to avoid type conversion issues
       const btcPrediction = typeof predictions.btc === 'number' ? predictions.btc : Number(predictions.btc);
@@ -128,28 +167,30 @@ class Dashboard {
         monteCarloSimulated: typeof metrics.monteCarloSimulated === 'boolean' ? metrics.monteCarloSimulated : Boolean(metrics.monteCarloSimulated)
       };
       
-      this.state = {
+      this.setState({
         btcPrediction,
         ethPrediction,
         portfolio: processedPortfolio,
         rebalanceResult,
         metrics: processedMetrics
-      };
-      console.log("Updated state:", this.state);
-      this.render();
+      });
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error("[Dashboard] Error fetching data:", error);
     }
   };
 
   render() {
+    console.log("[Dashboard] Rendering Dashboard component");
     const { btcPrediction, ethPrediction, portfolio, rebalanceResult, metrics, randomnessEnabled, monteCarloSimulationDays } = this.state;
     
     const dashboardTemplate = html`
       <main class="container">
         <header class="dashboard-header">
           <h1>AI Trading Bot Dashboard</h1>
-          <button class="logout-btn" @click=${this.onLogout}>Logout</button>
+          <div class="user-info">
+            ${this.principal ? html`<span class="principal-id">Principal ID: ${this.principal.substring(0, 5)}...${this.principal.substring(this.principal.length - 5)}</span>` : ''}
+            <button class="logout-btn" @click=${this.onLogout}>Logout</button>
+          </div>
         </header>
         
         <section class="predictions-section">
@@ -201,70 +242,65 @@ class Dashboard {
             <div class="metrics-grid">
               <div class="metric-card">
                 <h3>Sharpe Ratio</h3>
-                <p class="value">${metrics.updated ? metrics.sharpeRatio.toFixed(2) : 'Not Available'}</p>
+                <p class="metric-value">${metrics.sharpeRatio.toFixed(2)}</p>
               </div>
               <div class="metric-card">
                 <h3>Volatility</h3>
-                <p class="value">${metrics.updated ? (metrics.volatility * 100).toFixed(2) + '%' : 'Not Available'}</p>
+                <p class="metric-value">${(metrics.volatility * 100).toFixed(2)}%</p>
               </div>
               <div class="metric-card">
-                <h3>VaR (95%)</h3>
-                <p class="value">${metrics.updated ? (metrics.var95 * 100).toFixed(2) + '%' : 'Not Available'}</p>
+                <h3>Value at Risk (95%)</h3>
+                <p class="metric-value">${(metrics.var95 * 100).toFixed(2)}%</p>
               </div>
               <div class="metric-card">
                 <h3>Max Drawdown</h3>
-                <p class="value">${metrics.updated ? (metrics.maxDrawdown * 100).toFixed(2) + '%' : 'Not Available'}</p>
+                <p class="metric-value">${(metrics.maxDrawdown * 100).toFixed(2)}%</p>
               </div>
             </div>
           ` : html`<p>Loading metrics data...</p>`}
         </section>
         
-        <section class="randomness-section">
-          <h2>Randomness Features</h2>
-          <div class="randomness-controls">
-            <div class="toggle-container">
-              <label class="toggle-label">
-                <span>Enable Randomness</span>
-                <input type="checkbox" 
-                       ?checked=${randomnessEnabled} 
-                       @change=${this.toggleRandomness} />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            
-            <button class="randomness-btn" @click=${this.getRandomness}>
-              Get IC Randomness
-            </button>
-            
-            <div class="monte-carlo-controls">
-              <label for="simulation-days">Monte Carlo Simulation Days:</label>
-              <input type="number" 
-                     id="simulation-days" 
-                     min="1" 
-                     max="365" 
-                     value=${monteCarloSimulationDays} 
-                     @change=${this.updateMonteCarloSimulationDays} />
-              <button class="monte-carlo-btn" @click=${this.runMonteCarloSimulation}>
-                Run Monte Carlo Simulation
+        <section class="actions-section">
+          <h2>Portfolio Actions</h2>
+          <div class="action-buttons">
+            <button class="action-btn" @click=${this.rebalanceStandard}>Standard Rebalance</button>
+            <div class="randomness-controls">
+              <button class="action-btn ${randomnessEnabled ? 'active' : ''}" @click=${this.toggleRandomness}>
+                ${randomnessEnabled ? 'Randomness Enabled' : 'Enable Randomness'}
               </button>
-            </div>
-            
-            <div class="rebalance-controls">
-              <button class="rebalance-btn ${randomnessEnabled ? 'random' : 'standard'}" 
-                      @click=${randomnessEnabled ? this.rebalanceWithRandomness : this.rebalanceStandard}>
-                ${randomnessEnabled ? 'Rebalance with Randomness' : 'Standard Rebalance'}
-              </button>
+              ${randomnessEnabled ? html`
+                <button class="action-btn randomness-btn" @click=${this.getRandomness}>Get Randomness</button>
+                <button class="action-btn randomness-btn" @click=${this.rebalanceWithRandomness}>Rebalance with Randomness</button>
+              ` : ''}
             </div>
           </div>
         </section>
-
-        <div class="action-buttons">
-          <button class="refresh-btn" @click=${this.fetchData}>
-            Refresh Data
-          </button>
-        </div>
+        
+        <section class="simulation-section">
+          <h2>Monte Carlo Simulation</h2>
+          <div class="simulation-controls">
+            <div class="days-input">
+              <label for="simulation-days">Simulation Days:</label>
+              <input 
+                type="number" 
+                id="simulation-days" 
+                min="1" 
+                max="365" 
+                value="${monteCarloSimulationDays}"
+                @input=${this.updateMonteCarloSimulationDays}
+              />
+            </div>
+            <button class="action-btn" @click=${this.runMonteCarloSimulation}>Run Simulation</button>
+          </div>
+        </section>
       </main>
     `;
+    
+    // Render the template to the DOM
+    const rootElement = document.getElementById('root');
+    if (rootElement) {
+      render(dashboardTemplate, rootElement);
+    }
     
     return dashboardTemplate;
   }

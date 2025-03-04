@@ -12,7 +12,12 @@
         "src/motoko_contracts_frontend/dist"
       ],
       "type": "assets",
-      "workspace": "motoko_contracts_frontend"
+      "workspace": "motoko_contracts_frontend",
+      "headers": {
+        "default": {
+          "Content-Security-Policy": "default-src 'self'; connect-src 'self' https://icp0.io https://*.icp0.io https://icp-api.io; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; base-uri 'self'; form-action 'self';"
+        }
+      }
     }
   },
   "defaults": {
