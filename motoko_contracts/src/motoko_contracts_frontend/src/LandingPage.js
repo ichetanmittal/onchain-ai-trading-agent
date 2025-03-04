@@ -1,12 +1,43 @@
 import { html } from 'lit-html';
 import './LandingPage.css';
+import authService from './auth';
 
 class LandingPage {
   constructor(onLogin) {
+    console.log("[LandingPage] Initializing LandingPage component");
     this.onLogin = onLogin;
+    this.isLoggingIn = false;
+    this.error = null;
+  }
+
+  async handleLogin() {
+    console.log("[LandingPage] Handling login with Internet Identity");
+    this.isLoggingIn = true;
+    this.error = null;
+    this.render();
+    
+    try {
+      console.log("[LandingPage] Calling authService.login()");
+      const success = await authService.login();
+      console.log("[LandingPage] Login result:", success);
+      
+      if (!success) {
+        console.error("[LandingPage] Login failed");
+        this.error = "Login failed. Please try again.";
+      }
+      
+      this.isLoggingIn = false;
+      this.render();
+    } catch (error) {
+      console.error("[LandingPage] Login error:", error);
+      this.error = error.message || "An error occurred during login";
+      this.isLoggingIn = false;
+      this.render();
+    }
   }
 
   render() {
+    console.log("[LandingPage] Rendering LandingPage component");
     return html`
       <div class="landing-container">
         <nav class="landing-nav">
@@ -17,7 +48,13 @@ class LandingPage {
             <a href="#features">Features</a>
             <a href="#about">About</a>
             <a href="https://github.com/ichetanmittal/onchain-ai-trading-agent" target="_blank">GitHub</a>
-            <button class="login-btn" @click=${this.onLogin}>Login</button>
+            <button 
+              @click=${() => this.handleLogin()} 
+              ?disabled=${this.isLoggingIn}
+              class="login-btn"
+            >
+              ${this.isLoggingIn ? 'Connecting to Internet Identity...' : 'Connect Identity'}
+            </button>
           </div>
           <button class="mobile-menu-btn">
             <span></span>
@@ -26,13 +63,21 @@ class LandingPage {
           </button>
         </nav>
 
+        ${this.error ? html`<div class="error-message">${this.error}</div>` : ''}
+
         <section class="hero">
           <div class="hero-content">
             <div class="badge">Powered by Internet Computer</div>
             <h1>AI-Powered <span class="gradient-text">Crypto Trading</span> for the Future</h1>
             <p>Harness the power of artificial intelligence and blockchain technology for smarter, more transparent cryptocurrency trading decisions</p>
             <div class="cta-buttons">
-              <button class="cta-btn primary" @click=${this.onLogin}>Get Started</button>
+              <button 
+                @click=${() => this.handleLogin()} 
+                ?disabled=${this.isLoggingIn}
+                class="cta-btn primary"
+              >
+                ${this.isLoggingIn ? 'Connecting to Internet Identity...' : 'Connect with Internet Identity'}
+              </button>
               <button class="cta-btn secondary" @click=${() => document.getElementById('features').scrollIntoView({ behavior: 'smooth' })}>Learn More</button>
             </div>
             <div class="hero-stats">
@@ -117,8 +162,8 @@ class LandingPage {
           <div class="steps">
             <div class="step">
               <div class="step-number">01</div>
-              <h3>Connect Wallet</h3>
-              <p>Securely connect your Internet Computer wallet to our platform</p>
+              <h3>Connect Identity</h3>
+              <p>Securely authenticate with Internet Identity on the Internet Computer</p>
             </div>
             <div class="step">
               <div class="step-number">02</div>
@@ -150,7 +195,13 @@ class LandingPage {
                 The platform features modern portfolio optimization techniques, risk management controls,
                 and full transparency of all trading decisions.
               </p>
-              <button class="cta-btn primary" @click=${this.onLogin}>Access Dashboard</button>
+              <button 
+                @click=${() => this.handleLogin()} 
+                ?disabled=${this.isLoggingIn}
+                class="cta-btn primary"
+              >
+                ${this.isLoggingIn ? 'Connecting to Internet Identity...' : 'Connect with Internet Identity'}
+              </button>
             </div>
             <div class="about-image">
               <div class="tech-stack">
@@ -196,19 +247,19 @@ class LandingPage {
             <div class="social-links">
               <a href="#" aria-label="Twitter">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M23 3.01006C22.0424 3.68553 20.9821 4.20217 19.86 4.54006C19.2577 3.84757 18.4573 3.35675 17.567 3.13398C16.6767 2.91122 15.7395 2.96725 14.8821 3.29451C14.0247 3.62177 13.2884 4.20446 12.773 4.96377C12.2575 5.72309 11.9877 6.62239 12 7.54006V8.54006C10.2426 8.58562 8.50127 8.19587 6.93101 7.4055C5.36074 6.61513 4.01032 5.44869 3 4.01006C3 4.01006 -1 13.0101 8 17.0101C5.94053 18.408 3.48716 19.109 1 19.0101C10 24.0101 21 19.0101 21 7.51006C20.9991 7.23151 20.9723 6.95365 20.92 6.68006C21.9406 5.67355 22.6608 4.40277 23 3.01006Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M23 3.01006C22.0424 3.68553 20.9821 4.20217 19.86 4.54006C19.2577 3.84757 18.4573 3.35675 17.567 3.13398C16.6767 2.91122 15.7395 2.96725 14.8821 3.29451C14.0247 3.62177 13.2884 4.20446 12.773 4.96377C12.2575 5.72309 11.9877 6.62239 12 7.54006V8.54006C10.2426 8.58562 8.50127 8.19587 6.93101 7.4055C5.36074 6.61513 4.01032 5.44869 3 4.01006C3 4.01006 -1 13.0101 8 17.0101C5.94053 18.408 3.48716 19.109 1 19.0101C10 24.0101 21 19.0101 21 7.51006C20.9991 7.23151 20.9723 6.95365 20.92 6.68006C21.9406 5.67355 22.6608 4.40277 23 3.01006Z" stroke="currentColor" stroke-width="2"/>
                 </svg>
               </a>
               <a href="#" aria-label="GitHub">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M9 19C4.7 20.4 4.7 16.5 3 16M15 21V17.5C15 16.5 15.1 16.1 14.5 15.5C17.3 15.2 20 14.1 20 9.49995C19.9988 8.30492 19.5325 7.15726 18.7 6.29995C19.0905 5.26192 19.0545 4.11158 18.6 3.09995C18.6 3.09995 17.5 2.79995 15.1 4.39995C13.0672 3.87054 10.9328 3.87054 8.9 4.39995C6.5 2.79995 5.4 3.09995 5.4 3.09995C4.94548 4.11158 4.90953 5.26192 5.3 6.29995C4.46745 7.15726 4.00122 8.30492 4 9.49995C4 14.1 6.7 15.2 9.5 15.5C8.9 16.1 8.9 16.7 9 17.5V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M9 19C4 20.5 4 16.5 2 16M16 22V18.13C16.0375 17.6532 15.9731 17.1738 15.811 16.7238C15.6489 16.2738 15.3929 15.8634 15.06 15.52C18.2 15.17 21.5 13.98 21.5 8.52C21.4997 7.12383 20.9627 5.7812 20 4.77C20.4559 3.54851 20.4236 2.19835 19.91 0.999999C19.91 0.999999 18.73 0.649999 16 2.48C13.708 1.85882 11.292 1.85882 9 2.48C6.27 0.649999 5.09 0.999999 5.09 0.999999C4.57638 2.19835 4.54414 3.54851 5 4.77C4.03013 5.7887 3.49252 7.14346 3.5 8.55C3.5 13.97 6.8 15.16 9.94 15.55C9.611 15.89 9.35726 16.2954 9.19531 16.7399C9.03335 17.1844 8.96681 17.6581 9 18.13V22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </a>
               <a href="#" aria-label="Discord">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M9 11.5C9 12.3284 8.55228 13 8 13C7.44772 13 7 12.3284 7 11.5C7 10.6716 7.44772 10 8 10C8.55228 10 9 10.6716 9 11.5Z" fill="currentColor"/>
-                  <path d="M17 11.5C17 12.3284 16.5523 13 16 13C15.4477 13 15 12.3284 15 11.5C15 10.6716 15.4477 10 16 10C16.5523 10 17 10.6716 17 11.5Z" fill="currentColor"/>
-                  <path d="M20.6179 5.97C18.6996 5.01 16.6763 4.38 14.5596 4C14.2929 4.48 14.0263 4.96 13.7596 5.44C11.4929 5.08 9.17961 5.08 6.91294 5.44C6.64627 4.96 6.37961 4.48 6.11294 4C3.99627 4.38 1.97294 5.01 0.0546046 5.97C0.0546046 5.97 -1.33873 10.88 0.916271 15.76C2.65627 17.04 4.91294 18.1 7.16961 18.76C7.70294 18.08 8.17961 17.36 8.59294 16.6C7.83294 16.32 7.10627 15.96 6.41294 15.52C6.67961 15.32 6.93294 15.12 7.17294 14.92C9.77294 16.12 12.7063 16.12 15.2729 14.92C15.5129 15.12 15.7663 15.32 16.0329 15.52C15.3396 15.96 14.6129 16.32 13.8529 16.6C14.2663 17.36 14.7429 18.08 15.2763 18.76C17.5329 18.1 19.7896 17.04 21.5296 15.76C24.1063 10.04 22.1729 6.04 20.6179 5.97ZM7.44627 13.6C6.41294 13.6 5.57294 12.64 5.57294 11.48C5.57294 10.32 6.39294 9.36 7.44627 9.36C8.49961 9.36 9.33961 10.32 9.31961 11.48C9.31961 12.64 8.49961 13.6 7.44627 13.6ZM14.2129 13.6C13.1796 13.6 12.3396 12.64 12.3396 11.48C12.3396 10.32 13.1596 9.36 14.2129 9.36C15.2663 9.36 16.1063 10.32 16.0863 11.48C16.0863 12.64 15.2663 13.6 14.2129 13.6Z" fill="currentColor"/>
+                  <path d="M9 11.5C9 12.3284 8.32843 13 7.5 13C6.67157 13 6 12.3284 6 11.5C6 10.6716 6.67157 10 7.5 10C8.32843 10 9 10.6716 9 11.5Z" fill="currentColor"/>
+                  <path d="M16.5 13C17.3284 13 18 12.3284 18 11.5C18 10.6716 17.3284 10 16.5 10C15.6716 10 15 10.6716 15 11.5C15 12.3284 15.6716 13 16.5 13Z" fill="currentColor"/>
+                  <path d="M18 6C15.5 4 12 4 9 6M9 6C6.5 8 6.5 11 6 16C6 16 7 18 12 18C17 18 18 16 18 16C17.5 11 17.5 8 15 6M9 6L10 4M15 6L14 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </a>
             </div>
