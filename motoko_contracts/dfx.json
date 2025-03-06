@@ -2,7 +2,9 @@
   "canisters": {
     "motoko_contracts_backend": {
       "main": "src/motoko_contracts_backend/main.mo",
-      "type": "motoko"
+      "type": "motoko",
+      "dependencies": [],
+      "candid": "src/motoko_contracts_backend/main.did"
     },
     "motoko_contracts_frontend": {
       "dependencies": [
@@ -26,6 +28,17 @@
       "packtool": ""
     }
   },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:8000",
+      "type": "ephemeral",
+      "bitcoin": {
+        "enabled": true,
+        "nodes": ["127.0.0.1:18444"]
+      }
+    }
+  },
+  "dfx": "0.24.3",
   "output_env_file": ".env",
   "version": 1
 }

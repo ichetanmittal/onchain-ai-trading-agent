@@ -8,8 +8,47 @@ import Nat8 "mo:base/Nat8";
 import Int "mo:base/Int";
 import Debug "mo:base/Debug";
 import Iter "mo:base/Iter";
+import Text "mo:base/Text";
+import Principal "mo:base/Principal";
+import Error "mo:base/Error";
 
 actor {
+    // Define IC management canister interface types
+    type ECDSAPublicKeyReply = {
+      public_key : Blob;
+      chain_code : Blob;
+    };
+
+    type ECDSAPublicKeyRequest = {
+      canister_id : ?Principal;
+      derivation_path : [Blob];
+      key_id : { curve: Text; name: Text };
+    };
+
+    // Define Bitcoin types
+    type BitcoinGetAddressRequest = {
+      network: BitcoinNetwork;
+      address_type: { #p2pkh; #p2sh; #p2wpkh; #p2wsh };
+      key_id : { curve: Text; name: Text };
+      derivation_path : [Blob];
+    };
+
+    type BitcoinGetBalanceRequest = {
+      network: BitcoinNetwork;
+      address: Text;
+      min_confirmations: Nat32;
+    };
+
+    // IC Management Canister interface
+    type IC = actor {
+      ecdsa_public_key : shared ECDSAPublicKeyRequest -> async ECDSAPublicKeyReply;
+      bitcoin_get_address : shared BitcoinGetAddressRequest -> async Text;
+      bitcoin_get_balance : shared BitcoinGetBalanceRequest -> async Nat64;
+    };
+
+    // Create an instance of the IC management canister
+    let ic : IC = actor "aaaaa-aa";
+    
     // Random seed for deterministic testing (will be replaced with secure randomness)
     private var seed : ?Blob = null;
     
@@ -19,13 +58,23 @@ actor {
     // Volatility assumptions for Monte Carlo simulations
     private let BTC_DAILY_VOLATILITY : Float = 0.03; // 3% daily volatility
     private let ETH_DAILY_VOLATILITY : Float = 0.04; // 4% daily volatility
+        // Chain Key types for ECDSA and Bitcoin integration
+    type ECDSAPublicKey = Blob;
+    type ECDSAKeyId = { curve: Text; name: Text };
+    type BitcoinNetwork = { #mainnet; #testnet; #regtest };
+    type BitcoinAddress = Text;
+    
     // Portfolio type with amounts and metrics
     type Portfolio = {
         btc : Float;
         eth : Float;
+        ckbtc : Float;
+        cketh : Float;
         lastRebalanceTime : Int;
         totalValue : Float;
         performance : Float;
+        btcAddress : ?Text;
+        ethAddress : ?Text;
     };
 
     // Risk parameters
@@ -37,9 +86,13 @@ actor {
     var portfolio : Portfolio = {
         btc = 1000.0;
         eth = 1000.0;
+        ckbtc = 0.0;
+        cketh = 0.0;
         lastRebalanceTime = 0;
         totalValue = 2000.0;
         performance = 0.0;
+        btcAddress = null;
+        ethAddress = null;
     };
 
     // Store latest predictions and metrics
@@ -62,6 +115,95 @@ actor {
     // Get current portfolio state
     public query func getPortfolio() : async Portfolio {
         return portfolio;
+    };
+    
+    // Chain Key Cryptography functions for Bitcoin address generation
+    
+    // Get the ECDSA public key for the canister
+    public func get_ecdsa_public_key() : async Blob {
+        let key_id = { 
+            curve = "secp256k1"; 
+            name = "dfx_test_key" 
+        };
+        
+        let derivation_path = [];
+        
+        try {
+            let result = await ic.ecdsa_public_key({
+                canister_id = null;
+                derivation_path = derivation_path;
+                key_id = key_id;
+            });
+            return result.public_key;
+        } catch (e) {
+            Debug.print("Error getting ECDSA public key: " # Error.message(e));
+            throw e;
+        };
+    };
+    
+    // Generate a P2PKH Bitcoin address from the canister's ECDSA public key
+    public func get_p2pkh_address(network: BitcoinNetwork) : async BitcoinAddress {
+        let key_id = { 
+            curve = "secp256k1"; 
+            name = "dfx_test_key" 
+        };
+        
+        let derivation_path = [];
+        
+        try {
+            let result = await ic.bitcoin_get_address({
+                network = network;
+                address_type = #p2pkh;
+                key_id = key_id;
+                derivation_path = derivation_path;
+            });
+            
+            // Update portfolio with the Bitcoin address
+            portfolio := {
+                portfolio with btcAddress = ?result;
+            };
+            
+            return result;
+        } catch (e) {
+            Debug.print("Error generating Bitcoin address: " # Error.message(e));
+            throw e;
+        };
+    };
+    
+    // Get the current Bitcoin address for the canister
+    public query func get_bitcoin_address() : async ?BitcoinAddress {
+        return portfolio.btcAddress;
+    };
+    
+    // Get the balance of the Bitcoin address
+    public func get_bitcoin_balance(network: BitcoinNetwork, min_confirmations: Nat32) : async Nat64 {
+        let address = switch (portfolio.btcAddress) {
+            case (null) { 
+                throw Error.reject("No Bitcoin address generated yet");
+            };
+            case (?addr) { addr };
+        };
+        
+        try {
+            let result = await ic.bitcoin_get_balance({
+                network = network;
+                address = address;
+                min_confirmations = min_confirmations;
+            });
+            return result;
+        } catch (e) {
+            Debug.print("Error getting Bitcoin balance: " # Error.message(e));
+            throw e;
+        };
+    };
+    
+    // Update the ckBTC balance in the portfolio
+    public func update_ckbtc_balance(amount: Float) : async () {
+        portfolio := {
+            portfolio with 
+            ckbtc = amount;
+            totalValue = portfolio.btc + portfolio.eth + amount + portfolio.cketh;
+        };
     };
 
     // Get latest predictions
@@ -348,9 +490,13 @@ actor {
             portfolio := {
                 btc = newBtc;
                 eth = newEth;
+                ckbtc = portfolio.ckbtc;
+                cketh = portfolio.cketh;
                 lastRebalanceTime = currentTime;
                 totalValue = totalValue;
                 performance = (totalValue - 2000.0) / 2000.0;  // Simple return calculation
+                btcAddress = portfolio.btcAddress;
+                ethAddress = portfolio.ethAddress;
             };
 
             latestRebalanceResult := "Portfolio rebalanced. New weights: BTC=" # Float.toText(targetBtcWeight) # ", ETH=" # Float.toText(targetEthWeight);
@@ -382,9 +528,13 @@ actor {
         portfolio := {
             btc = newBtc;
             eth = newEth;
+            ckbtc = portfolio.ckbtc;
+            cketh = portfolio.cketh;
             lastRebalanceTime = currentTime;
             totalValue = totalValue;
             performance = (totalValue - 2000.0) / 2000.0;  // Simple return calculation
+            btcAddress = portfolio.btcAddress;
+            ethAddress = portfolio.ethAddress;
         };
 
         latestRebalanceResult := "Portfolio rebalanced with randomness. New weights: BTC=" # Float.toText(targetBtcWeight) # ", ETH=" # Float.toText(targetEthWeight);

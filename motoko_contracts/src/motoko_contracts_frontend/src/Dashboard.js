@@ -15,7 +15,10 @@ class Dashboard {
       rebalanceResult: null,
       metrics: null,
       randomnessEnabled: false,
-      monteCarloSimulationDays: 30
+      monteCarloSimulationDays: 30,
+      btcAddress: null,
+      ckbtcBalance: 0,
+      btcNetwork: 'regtest'
     };
     console.log("[Dashboard] Initializing state:", this.state);
     
@@ -122,6 +125,67 @@ class Dashboard {
     }
   };
   
+  // Generate a Bitcoin address using Chain Key Cryptography
+  generateBitcoinAddress = async () => {
+    console.log("[Dashboard] Generating Bitcoin address");
+    try {
+      const actor = authService.getActor();
+      if (!actor) {
+        throw new Error("Not authenticated");
+      }
+      
+      // Convert network string to variant
+      const network = { [this.state.btcNetwork]: null };
+      const address = await actor.get_p2pkh_address(network);
+      console.log("[Dashboard] Generated Bitcoin address:", address);
+      
+      this.setState({ btcAddress: address });
+      alert(`Bitcoin address generated: ${address}\n\nYou can use this address to deposit Bitcoin that will be converted to ckBTC.`);
+      
+      // Refresh data to show updated portfolio
+      this.fetchData();
+    } catch (error) {
+      console.error("[Dashboard] Error generating Bitcoin address:", error);
+      alert("Error generating Bitcoin address: " + error.message);
+    }
+  };
+  
+  // Get Bitcoin balance
+  getBitcoinBalance = async () => {
+    console.log("[Dashboard] Getting Bitcoin balance");
+    try {
+      const actor = authService.getActor();
+      if (!actor) {
+        throw new Error("Not authenticated");
+      }
+      
+      // Convert network string to variant
+      const network = { [this.state.btcNetwork]: null };
+      const balance = await actor.get_bitcoin_balance(network, 0);
+      console.log("[Dashboard] Bitcoin balance:", balance);
+      
+      // Convert satoshis to BTC (1 BTC = 100,000,000 satoshis)
+      const btcBalance = Number(balance) / 100000000;
+      
+      // Update ckBTC balance in the portfolio
+      await actor.update_ckbtc_balance(btcBalance);
+      
+      alert(`Bitcoin balance: ${btcBalance} BTC\n\nThis balance has been converted to ckBTC in your portfolio.`);
+      
+      // Refresh data to show updated portfolio
+      this.fetchData();
+    } catch (error) {
+      console.error("[Dashboard] Error getting Bitcoin balance:", error);
+      alert("Error getting Bitcoin balance: " + error.message);
+    }
+  };
+  
+  // Change Bitcoin network
+  changeBitcoinNetwork = (event) => {
+    console.log("[Dashboard] Changing Bitcoin network to:", event.target.value);
+    this.setState({ btcNetwork: event.target.value });
+  };
+  
   fetchData = async () => {
     console.log("[Dashboard] Fetching data");
     try {
@@ -146,6 +210,10 @@ class Dashboard {
       const metrics = await actor.getMetrics();
       console.log("[Dashboard] Metrics:", metrics);
       
+      // Fetch Bitcoin address if available
+      const btcAddress = await actor.get_bitcoin_address();
+      console.log("[Dashboard] Bitcoin address:", btcAddress);
+      
       // Convert values to JavaScript numbers to avoid type conversion issues
       const btcPrediction = typeof predictions.btc === 'number' ? predictions.btc : Number(predictions.btc);
       const ethPrediction = typeof predictions.eth === 'number' ? predictions.eth : Number(predictions.eth);
@@ -153,9 +221,13 @@ class Dashboard {
       const processedPortfolio = {
         btc: typeof portfolio.btc === 'number' ? portfolio.btc : Number(portfolio.btc),
         eth: typeof portfolio.eth === 'number' ? portfolio.eth : Number(portfolio.eth),
+        ckbtc: typeof portfolio.ckbtc === 'number' ? portfolio.ckbtc : Number(portfolio.ckbtc),
+        cketh: typeof portfolio.cketh === 'number' ? portfolio.cketh : Number(portfolio.cketh),
         totalValue: typeof portfolio.totalValue === 'number' ? portfolio.totalValue : Number(portfolio.totalValue),
         performance: typeof portfolio.performance === 'number' ? portfolio.performance : Number(portfolio.performance),
-        lastRebalanceTime: portfolio.lastRebalanceTime
+        lastRebalanceTime: portfolio.lastRebalanceTime,
+        btcAddress: portfolio.btcAddress,
+        ethAddress: portfolio.ethAddress
       };
       
       const processedMetrics = {
@@ -172,7 +244,9 @@ class Dashboard {
         ethPrediction,
         portfolio: processedPortfolio,
         rebalanceResult,
-        metrics: processedMetrics
+        metrics: processedMetrics,
+        btcAddress: btcAddress && btcAddress.length > 0 ? btcAddress[0] : null,
+        ckbtcBalance: processedPortfolio.ckbtc
       });
     } catch (error) {
       console.error("[Dashboard] Error fetching data:", error);
@@ -181,7 +255,7 @@ class Dashboard {
 
   render() {
     console.log("[Dashboard] Rendering Dashboard component");
-    const { btcPrediction, ethPrediction, portfolio, rebalanceResult, metrics, randomnessEnabled, monteCarloSimulationDays } = this.state;
+    const { btcPrediction, ethPrediction, portfolio, rebalanceResult, metrics, randomnessEnabled, monteCarloSimulationDays, btcAddress, ckbtcBalance, btcNetwork } = this.state;
     
     const dashboardTemplate = html`
       <main class="dashboard-container">
@@ -281,6 +355,62 @@ class Dashboard {
               </div>
             </div>
           ` : html`<p>Loading portfolio data...</p>`}
+        </section>
+
+        <section id="chainkey" class="chainkey-section">
+          <div class="section-header">
+            <div class="section-tag">Chain Key</div>
+            <h2>ckBTC <span class="gradient-text">Integration</span></h2>
+          </div>
+          <div class="chainkey-grid">
+            <div class="chainkey-card">
+              <div class="feature-icon blockchain-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M9 4H5C4.44772 4 4 4.44772 4 5V9C4 9.55228 4.44772 10 5 10H9C9.55228 10 10 9.55228 10 9V5C10 4.44772 9.55228 4 9 4Z" stroke="currentColor" stroke-width="2"/>
+                  <path d="M19 4H15C14.4477 4 14 4.44772 14 5V9C14 9.55228 14.4477 10 15 10H19C19.5523 10 20 9.55228 20 9V5C20 4.44772 19.5523 4 19 4Z" stroke="currentColor" stroke-width="2"/>
+                  <path d="M9 14H5C4.44772 14 4 14.4477 4 15V19C4 19.5523 4.44772 20 5 20H9C9.55228 20 10 19.5523 10 19V15C10 14.4477 9.55228 14 9 14Z" stroke="currentColor" stroke-width="2"/>
+                  <path d="M19 14H15C14.4477 14 14 14.4477 14 15V19C14 19.5523 14.4477 20 15 20H19C19.5523 20 20 19.5523 20 19V15C20 14.4477 19.5523 14 19 14Z" stroke="currentColor" stroke-width="2"/>
+                </svg>
+              </div>
+              <h3>Bitcoin Address</h3>
+              ${btcAddress ? html`
+                <p class="address">${btcAddress}</p>
+                <p class="card-description">Your Bitcoin address for deposits</p>
+              ` : html`
+                <p class="card-description">Generate a Bitcoin address to deposit BTC</p>
+                <button class="action-btn" @click=${this.generateBitcoinAddress}>Generate Address</button>
+              `}
+            </div>
+            <div class="chainkey-card">
+              <div class="feature-icon blockchain-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-width="2"/>
+                  <path d="M15 8.5C14.315 7.81501 13.1087 7.33855 12 7.30872M9 8.5C9.685 7.81501 10.8913 7.33855 12 7.30872M12 7.30872V7M12 17V12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <h3>ckBTC Balance</h3>
+              <p class="amount">${ckbtcBalance ? ckbtcBalance.toFixed(8) : '0.00000000'} ckBTC</p>
+              <p class="card-description">Your current ckBTC balance</p>
+              <button class="action-btn" @click=${this.getBitcoinBalance}>Check Balance</button>
+            </div>
+          </div>
+          <div class="chainkey-controls">
+            <div class="section-tag">Network</div>
+            <div class="network-selector">
+              <label>
+                <input type="radio" name="btcNetwork" value="regtest" ?checked=${btcNetwork === 'regtest'} @change=${this.changeBitcoinNetwork} />
+                Regtest (Local)
+              </label>
+              <label>
+                <input type="radio" name="btcNetwork" value="testnet" ?checked=${btcNetwork === 'testnet'} @change=${this.changeBitcoinNetwork} />
+                Testnet
+              </label>
+              <label>
+                <input type="radio" name="btcNetwork" value="mainnet" ?checked=${btcNetwork === 'mainnet'} @change=${this.changeBitcoinNetwork} />
+                Mainnet
+              </label>
+            </div>
+          </div>
         </section>
 
         <section id="rebalance" class="rebalance-section">
