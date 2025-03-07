@@ -261,13 +261,13 @@ class Dashboard {
       <main class="dashboard-container">
         <nav class="landing-nav dashboard-nav">
           <div class="logo">
-            <h1>OnChain<span class="accent">AI</span></h1>
+            <h1>IC<span class="accent">INDEX</span></h1>
           </div>
           <div class="nav-links">
             <a href="#predictions">Predictions</a>
             <a href="#portfolio">Portfolio</a>
             <a href="#metrics">Metrics</a>
-            <a href="#actions">Actions</a>
+            <a href="#randomness">Actions</a>
             ${this.principal ? html`<span class="principal-id">Principal: ${this.principal.substring(0, 5)}...${this.principal.substring(this.principal.length - 5)}</span>` : ''}
             <button class="login-btn logout-btn" @click=${this.onLogout}>Logout</button>
           </div>

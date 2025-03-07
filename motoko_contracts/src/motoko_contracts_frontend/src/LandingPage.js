@@ -42,7 +42,7 @@ class LandingPage {
       <div class="landing-container">
         <nav class="landing-nav">
           <div class="logo">
-            <h1>OnChain<span class="accent">AI</span></h1>
+            <h1>IC<span class="accent">INDEX</span></h1>
           </div>
           <div class="nav-links">
             <a href="#features">Features</a>
@@ -218,7 +218,7 @@ class LandingPage {
         <footer class="landing-footer">
           <div class="footer-top">
             <div class="footer-brand">
-              <h2>OnChain<span class="accent">AI</span></h2>
+              <h2>IC<span class="accent">INDEX</span></h2>
               <p>AI-powered cryptocurrency trading on the Internet Computer</p>
             </div>
             <div class="footer-links-container">
